@@ -5,7 +5,6 @@ import {
   VolumeX,
   MousePointer,
   Hand,
-  MoveVertical,
   Power,
   ShieldCheck,
   Move,
@@ -16,8 +15,6 @@ import { sound } from '../utils/sound';
 interface SettingsWidgetProps {
   expandOnHover: boolean;
   onToggleExpandOnHover: (val: boolean) => void;
-  yOffset: number;
-  onYOffsetChange: (val: number) => void;
   isDragMode: boolean;
   onToggleDragMode: (val: boolean) => void;
   onResetPosition: () => void;
@@ -27,8 +24,6 @@ interface SettingsWidgetProps {
 export const SettingsWidget: React.FC<SettingsWidgetProps> = ({
   expandOnHover,
   onToggleExpandOnHover,
-  yOffset,
-  onYOffsetChange,
   isDragMode,
   onToggleDragMode,
   onResetPosition,
@@ -178,25 +173,6 @@ export const SettingsWidget: React.FC<SettingsWidgetProps> = ({
               }`}
             />
           </button>
-        </div>
-
-        {/* Y-Offset slider */}
-        <div className="flex flex-col p-2 rounded-xl bg-zinc-900/80 border border-zinc-800">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center space-x-2">
-              <MoveVertical className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs text-zinc-200 font-medium">Jarak Atas (Y-Offset)</span>
-            </div>
-            <span className="text-[10px] font-mono text-zinc-400">{yOffset}px</span>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="40"
-            value={yOffset}
-            onChange={(e) => onYOffsetChange(Number(e.target.value))}
-            className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-zinc-700 rounded-lg"
-          />
         </div>
 
         {/* App Info & Quit */}

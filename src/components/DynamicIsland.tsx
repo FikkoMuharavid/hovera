@@ -155,10 +155,6 @@ export const DynamicIsland: React.FC = () => {
   const [expandOnHover, setExpandOnHover] = useState(() => {
     return localStorage.getItem('di_expand_hover') === 'true';
   });
-  const [yOffset, setYOffset] = useState(() => {
-    const val = localStorage.getItem('di_y_offset');
-    return val ? Number(val) : 6;
-  });
 
   const islandRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -287,14 +283,6 @@ export const DynamicIsland: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('di_expand_hover', String(expandOnHover));
   }, [expandOnHover]);
-
-  const handleYOffsetChange = (val: number) => {
-    setYOffset(val);
-    localStorage.setItem('di_y_offset', String(val));
-    if (window.electronAPI) {
-      window.electronAPI.adjustYOffset(val);
-    }
-  };
 
   // Drag Mode & Window Positioning
   const [isDragModeEnabled, setIsDragModeEnabled] = useState<boolean>(() => {
@@ -663,8 +651,6 @@ export const DynamicIsland: React.FC = () => {
                       key="settings"
                       expandOnHover={expandOnHover}
                       onToggleExpandOnHover={setExpandOnHover}
-                      yOffset={yOffset}
-                      onYOffsetChange={handleYOffsetChange}
                       isDragMode={isDragModeEnabled}
                       onToggleDragMode={setIsDragModeEnabled}
                       onResetPosition={handleResetPosition}
