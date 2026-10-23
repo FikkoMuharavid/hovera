@@ -64,28 +64,22 @@ export const SettingsWidget: React.FC<SettingsWidgetProps> = ({
 
       <div className="flex-1 space-y-2 mt-2 overflow-y-auto pr-0.5">
         {/* Drag Mode (Geser Posisi Dynamic Island) */}
-        <div
-          className={`flex flex-col p-2.5 rounded-xl border transition-all ${
-            isDragMode
-              ? 'bg-cyan-950/40 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
-              : 'bg-zinc-900/80 border-zinc-800'
-          }`}
-        >
+        <div className="flex flex-col p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Move className={`w-4 h-4 ${isDragMode ? 'text-cyan-400 animate-pulse' : 'text-zinc-400'}`} />
+              <Move className={`w-4 h-4 ${isDragMode ? 'text-sky-400' : 'text-zinc-400'}`} />
               <div className="flex flex-col">
                 <div className="flex items-center space-x-1.5">
                   <span className="text-xs text-zinc-200 font-medium">Mode Geser (Bebas Pindah)</span>
                   {isDragMode && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/25 text-cyan-300 text-[8.5px] font-mono border border-cyan-500/40 animate-pulse">
-                      ON · Siap Digeser
+                    <span className="px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-300 text-[8.5px] font-mono border border-sky-500/30">
+                      ON
                     </span>
                   )}
                 </div>
                 <span className="text-[10px] text-zinc-500">
                   {isDragMode
-                    ? 'Tahan dan geser kapsul ke mana saja di layar'
+                    ? 'Tahan dan geser kapsul ke mana saja di layar. Matikan switch jika ingin mengunci.'
                     : 'Aktifkan untuk memindahkan letak Dynamic Island'}
                 </span>
               </div>
@@ -97,9 +91,9 @@ export const SettingsWidget: React.FC<SettingsWidgetProps> = ({
                 onToggleDragMode(!isDragMode);
               }}
               className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
-                isDragMode ? 'bg-cyan-500' : 'bg-zinc-700'
+                isDragMode ? 'bg-sky-500' : 'bg-zinc-700'
               }`}
-              title={isDragMode ? 'Kunci posisi (Matikan mode geser)' : 'Aktifkan mode geser'}
+              title={isDragMode ? 'Matikan mode geser (kunci posisi)' : 'Aktifkan mode geser'}
             >
               <div
                 className={`w-4 h-4 rounded-full bg-white transition-transform ${

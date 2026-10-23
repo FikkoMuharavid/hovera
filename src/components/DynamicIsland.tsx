@@ -7,7 +7,6 @@ import {
   HeartPulse,
   Settings as SettingsIcon,
   ChevronUp,
-  Move,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CompactView } from './CompactView';
@@ -519,10 +518,8 @@ export const DynamicIsland: React.FC = () => {
             ? '0 10px 30px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.18)'
             : '0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14)',
         }}
-        className={`relative overflow-hidden bg-black text-white border select-none transition-all ${
-          isDragModeEnabled
-            ? 'ring-2 ring-cyan-400/80 shadow-[0_0_24px_rgba(6,182,212,0.45)] cursor-grab active:cursor-grabbing border-cyan-400/60'
-            : 'border-white/15 cursor-default'
+        className={`relative overflow-hidden bg-black text-white border border-white/15 select-none ${
+          isDragModeEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
         }`}
       >
         <AnimatePresence>
@@ -604,33 +601,14 @@ export const DynamicIsland: React.FC = () => {
                   })}
                 </div>
 
-                <div className="flex items-center space-x-1.5">
-                  {/* Quick Drag Mode Button */}
-                  <button
-                    onClick={() => {
-                      sound.playClick();
-                      setIsDragModeEnabled(!isDragModeEnabled);
-                    }}
-                    className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all ${
-                      isDragModeEnabled
-                        ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.25)] animate-pulse'
-                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60'
-                    }`}
-                    title={isDragModeEnabled ? 'Kunci posisi (Matikan mode geser)' : 'Aktifkan mode geser'}
-                  >
-                    <Move className="w-3 h-3" />
-                    <span>{isDragModeEnabled ? 'Geser: ON' : 'Geser'}</span>
-                  </button>
-
-                  {/* Collapse button */}
-                  <button
-                    onClick={toggleExpand}
-                    className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
-                    title="Tutup Kapsul"
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* Collapse button */}
+                <button
+                  onClick={toggleExpand}
+                  className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                  title="Tutup Kapsul"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Main Content Area */}
@@ -699,30 +677,6 @@ export const DynamicIsland: React.FC = () => {
           )}
         </AnimatePresence>
       </motion.div>
-
-      {/* Floating Quick Lock Badge below capsule */}
-      <AnimatePresence>
-        {isDragModeEnabled && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="mt-1.5 flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-cyan-950/95 border border-cyan-500/60 text-cyan-200 text-[9.5px] font-medium shadow-lg backdrop-blur-md cursor-pointer hover:bg-cyan-900/95 transition-all select-none pointer-events-auto"
-            onClick={(e) => {
-              e.stopPropagation();
-              sound.playPop();
-              setIsDragModeEnabled(false);
-            }}
-            title="Klik untuk mengunci posisi Dynamic Island"
-          >
-            <Move className="w-2.5 h-2.5 text-cyan-300 animate-pulse" />
-            <span>Mode Geser Aktif (Tahan & Geser)</span>
-            <span className="text-zinc-500">·</span>
-            <span className="text-white font-semibold underline underline-offset-2">Kunci 🔒</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
