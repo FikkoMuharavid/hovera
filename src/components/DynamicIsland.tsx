@@ -29,11 +29,17 @@ export const DynamicIsland: React.FC = () => {
   const [timerActive, setTimerActive] = useState(false);
   const [timerRemaining, setTimerRemaining] = useState('25:00');
 
-  // Sedentary & Stretch Reminder
-  const [sittingMinutes, setSittingMinutes] = useState(0);
+  // Sedentary & Stretch Reminder with Automatic Timer
   const [reminderInterval, setReminderInterval] = useState(() => {
     const val = localStorage.getItem('di_stretch_interval');
     return val ? Number(val) : 45;
+  });
+  const [stretchSecondsLeft, setStretchSecondsLeft] = useState(() => {
+    const val = localStorage.getItem('di_stretch_interval');
+    return (val ? Number(val) : 45) * 60;
+  });
+  const [autoAlertEnabled, setAutoAlertEnabled] = useState(() => {
+    return localStorage.getItem('di_stretch_auto_alert') !== 'false';
   });
 
   // Preferences
@@ -67,28 +73,44 @@ export const DynamicIsland: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Sitting tracker timer (1 minute interval)
+  // Automatic stretch countdown timer (every 1 second)
   useEffect(() => {
-    const tracker = setInterval(() => {
-      setSittingMinutes((prev) => {
-        const next = prev + 1;
-        if (next === reminderInterval) {
+    if (!autoAlertEnabled) return;
+    const stretchTimer = setInterval(() => {
+      setStretchSecondsLeft((prev) => {
+        if (prev <= 1) {
           sound.playSuccess();
+          // Automatically expand Dynamic Island to Stretch tab!
+          setIsExpanded(true);
+          setActiveTab('stretch');
+          return 0;
         }
-        return next;
+        return prev - 1;
       });
-    }, 60000);
-    return () => clearInterval(tracker);
-  }, [reminderInterval]);
+    }, 1000);
+    return () => clearInterval(stretchTimer);
+  }, [autoAlertEnabled]);
 
-  // Save preferences
-  useEffect(() => {
-    localStorage.setItem('di_expand_hover', String(expandOnHover));
-  }, [expandOnHover]);
+  const handleResetStretch = () => {
+    sound.playSuccess();
+    setStretchSecondsLeft(reminderInterval * 60);
+  };
 
-  const handleIntervalChange = (mins: number) => {
+  const handleSnoozeStretch = (minutes: number) => {
+    sound.playClick();
+    setStretchSecondsLeft(minutes * 60);
+  };
+
+  const handleStretchIntervalChange = (mins: number) => {
     setReminderInterval(mins);
+    setStretchSecondsLeft(mins * 60);
     localStorage.setItem('di_stretch_interval', String(mins));
+  };
+
+  const handleToggleAutoAlert = () => {
+    const nextVal = !autoAlertEnabled;
+    setAutoAlertEnabled(nextVal);
+    localStorage.setItem('di_stretch_auto_alert', String(nextVal));
   };
 
   const handleYOffsetChange = (val: number) => {
@@ -136,7 +158,7 @@ export const DynamicIsland: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const isStretchAlert = sittingMinutes >= reminderInterval;
+  const isStretchAlert = stretchSecondsLeft === 0;
 
   const tabs = [
     { id: 'clock', label: 'Waktu', icon: ClockIcon },
@@ -276,10 +298,13 @@ export const DynamicIsland: React.FC = () => {
                   {activeTab === 'stretch' && (
                     <StretchWidget
                       key="stretch"
-                      sittingMinutes={sittingMinutes}
-                      onResetSitting={() => setSittingMinutes(0)}
-                      reminderInterval={reminderInterval}
-                      onIntervalChange={handleIntervalChange}
+                      stretchSecondsLeft={stretchSecondsLeft}
+                      totalIntervalMinutes={reminderInterval}
+                      onResetTimer={handleResetStretch}
+                      onSnoozeTimer={handleSnoozeStretch}
+                      onIntervalChange={handleStretchIntervalChange}
+                      autoAlertEnabled={autoAlertEnabled}
+                      onToggleAutoAlert={handleToggleAutoAlert}
                     />
                   )}
                   {activeTab === 'settings' && (
