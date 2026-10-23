@@ -16,5 +16,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   quitApp: () => {
     ipcRenderer.send('quit-app');
   },
+  openProjectInAntigravity: (folderPath) => {
+    return ipcRenderer.invoke('open-project-in-antigravity', folderPath);
+  },
+  scanProjects: () => {
+    return ipcRenderer.invoke('scan-projects');
+  },
+  selectFolder: () => {
+    return ipcRenderer.invoke('select-folder');
+  },
   isElectron: true,
 });

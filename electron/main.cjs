@@ -201,6 +201,72 @@ ipcMain.handle('launch-app', async (event, appTarget) => {
   }
 });
 
+ipcMain.handle('open-project-in-antigravity', async (event, folderPath) => {
+  try {
+    if (!folderPath) return false;
+    const localAppData = process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local');
+    const antigravityExe = path.join(
+      localAppData,
+      'Programs',
+      'Antigravity IDE',
+      'Antigravity IDE.exe'
+    );
+    exec(`"${antigravityExe}" "${folderPath}"`);
+    return true;
+  } catch (err) {
+    console.error('Failed to open project in Antigravity:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('scan-projects', async () => {
+  try {
+    const fs = require('fs');
+    const baseDirs = [
+      { category: 'Program Kantor', basePath: 'C:\\Developer\\Program Kantor' },
+      { category: 'Program Freelance', basePath: 'C:\\Developer\\Program Freelance' },
+    ];
+
+    const results = [];
+    for (const b of baseDirs) {
+      if (fs.existsSync(b.basePath)) {
+        const items = fs.readdirSync(b.basePath, { withFileTypes: true });
+        for (const it of items) {
+          if (it.isDirectory() && !it.name.startsWith('.')) {
+            results.push({
+              name: it.name,
+              path: path.join(b.basePath, it.name),
+              category: b.category,
+            });
+          }
+        }
+      }
+    }
+    return results;
+  } catch (err) {
+    console.error('Failed to scan projects:', err);
+    return [];
+  }
+});
+
+ipcMain.handle('select-folder', async () => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Pilih Folder Project untuk Antigravity',
+      properties: ['openDirectory'],
+      defaultPath: 'C:\\Developer',
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      return result.filePaths[0];
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to select folder:', err);
+    return null;
+  }
+});
+
 app.whenReady().then(() => {
   createMainWindow();
   createTray();
