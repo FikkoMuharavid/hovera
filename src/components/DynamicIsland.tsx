@@ -25,7 +25,18 @@ export const DynamicIsland: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('clock');
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [activeTasksCount, setActiveTasksCount] = useState(0);
+  const [activeTasksCount, setActiveTasksCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem('di_tasks');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.filter((t: any) => !t.completed).length;
+      }
+    } catch {
+      // fallback
+    }
+    return 0;
+  });
 
   // ================= FOCUS TIMER =================
   const [timerTotalSeconds, setTimerTotalSeconds] = useState(25 * 60);
@@ -331,22 +342,33 @@ export const DynamicIsland: React.FC = () => {
     annivCalc.isMensiveToday ||
     (showAlwaysAnniv ? true : annivCalc.isMensiveApproaching);
 
-  const hasAlert = isStretchAlert || isWaterAlert;
+  const hasWater = isWaterAlert;
+  const hasStretch = isStretchAlert;
+  const hasTimer = isTimerRunning;
+  const hasTasks = activeTasksCount > 0;
+  const hasAnniv = annivCalc.isAnnivToday;
+  const hasMensive = !annivCalc.isAnnivToday && annivCalc.isMensiveToday;
+  const hasApproachingAnniv =
+    !annivCalc.isAnnivToday &&
+    !annivCalc.isMensiveToday &&
+    showAnnivBadge &&
+    (annivCalc.isMensiveApproaching || (annivCalc.daysUntilMensive !== undefined && annivCalc.daysUntilMensive <= 3));
+
   const notificationCount =
-    (isWaterAlert ? 1 : 0) +
-    (isStretchAlert ? 1 : 0) +
-    (isTimerRunning ? 1 : 0) +
-    (activeTasksCount > 0 ? 1 : 0) +
-    (showAnnivBadge ? 1 : 0);
+    (hasWater ? 1 : 0) +
+    (hasStretch ? 1 : 0) +
+    (hasTimer ? 1 : 0) +
+    (hasTasks ? 1 : 0) +
+    (hasAnniv || hasMensive || hasApproachingAnniv ? 1 : 0);
 
   const compactWidth = (() => {
     if (notificationCount >= 3) return 310;
     if (notificationCount === 2) return 275;
-    if (hasAlert) return 240;
-    if (showAnnivBadge) return 235;
-    if (isTimerRunning) return 230;
-    if (activeTasksCount > 0) return 215;
-    return 180;
+    if (hasWater || hasStretch) return 240;
+    if (hasAnniv || hasMensive || hasApproachingAnniv) return 235;
+    if (hasTimer) return 230;
+    if (hasTasks) return 215;
+    return 168; // Symmetrically centered when no reminders active
   })();
 
   const tabs = [
