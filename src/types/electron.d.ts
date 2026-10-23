@@ -14,6 +14,11 @@ export interface ElectronAPI {
   openProjectInAntigravity?: (folderPath: string) => Promise<boolean>;
   scanProjects?: () => Promise<ProjectInfo[]>;
   selectFolder?: () => Promise<string | null>;
+  moveWindow?: (deltaX: number, deltaY: number) => void;
+  setWindowPosition?: (x: number, y: number) => void;
+  getWindowPosition?: () => Promise<{ x: number; y: number; isCustom?: boolean } | null>;
+  resetWindowPosition?: () => Promise<{ x: number; y: number } | null>;
+  onPositionReset?: (callback: () => void) => () => void;
 }
 
 declare global {

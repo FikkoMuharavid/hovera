@@ -25,8 +25,70 @@ try {
   // fallback
 }
 
+let customWindowX = null;
+let customWindowY = null;
+
+function getWindowStateFilePath() {
+  try {
+    return path.join(app.getPath('userData'), 'window-position.json');
+  } catch {
+    return null;
+  }
+}
+
+function loadSavedWindowPosition() {
+  try {
+    const fs = require('fs');
+    const p = getWindowStateFilePath();
+    if (p && fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (typeof data.x === 'number' && typeof data.y === 'number') {
+        customWindowX = Math.round(data.x);
+        customWindowY = Math.round(data.y);
+      }
+    }
+  } catch (err) {
+    // fallback
+  }
+}
+
+function saveWindowPosition(x, y) {
+  try {
+    const fs = require('fs');
+    const p = getWindowStateFilePath();
+    if (p) {
+      fs.writeFileSync(p, JSON.stringify({ x: Math.round(x), y: Math.round(y) }));
+    }
+  } catch (err) {
+    // fallback
+  }
+}
+
+function clearSavedWindowPosition() {
+  try {
+    const fs = require('fs');
+    const p = getWindowStateFilePath();
+    if (p && fs.existsSync(p)) {
+      fs.unlinkSync(p);
+    }
+  } catch (err) {
+    // fallback
+  }
+}
+
 function updateWindowPosition() {
   if (!mainWindow) return;
+
+  if (customWindowX !== null && customWindowY !== null) {
+    mainWindow.setBounds({
+      x: customWindowX,
+      y: customWindowY,
+      width: WINDOW_WIDTH,
+      height: WINDOW_HEIGHT,
+    });
+    return;
+  }
+
   const primaryDisplay = screen.getPrimaryDisplay();
   const { workArea } = primaryDisplay;
 
@@ -65,6 +127,7 @@ function createMainWindow() {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
 
+  loadSavedWindowPosition();
   updateWindowPosition();
 
   // Initially ignore mouse events on the transparent area
@@ -110,8 +173,14 @@ function createTray() {
     {
       label: 'Reset Posisi ke Atas Tengah',
       click: () => {
+        customWindowX = null;
+        customWindowY = null;
         currentYOffset = 6;
+        clearSavedWindowPosition();
         updateWindowPosition();
+        if (mainWindow) {
+          mainWindow.webContents.send('window-position-reset');
+        }
       },
     },
     { type: 'separator' },
@@ -154,7 +223,45 @@ ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
 
 ipcMain.on('adjust-y-offset', (event, offset) => {
   currentYOffset = Math.max(0, Math.min(100, offset));
+  if (customWindowX === null) {
+    updateWindowPosition();
+  }
+});
+
+ipcMain.on('move-window', (event, { deltaX, deltaY }) => {
+  if (!mainWindow) return;
+  const [currentX, currentY] = mainWindow.getPosition();
+  const newX = Math.round(currentX + deltaX);
+  const newY = Math.round(currentY + deltaY);
+  mainWindow.setPosition(newX, newY);
+  customWindowX = newX;
+  customWindowY = newY;
+  saveWindowPosition(newX, newY);
+});
+
+ipcMain.on('set-window-position', (event, { x, y }) => {
+  if (!mainWindow) return;
+  customWindowX = Math.round(x);
+  customWindowY = Math.round(y);
+  mainWindow.setPosition(customWindowX, customWindowY);
+  saveWindowPosition(customWindowX, customWindowY);
+});
+
+ipcMain.handle('get-window-position', () => {
+  if (!mainWindow) return null;
+  const [x, y] = mainWindow.getPosition();
+  return { x, y, isCustom: customWindowX !== null && customWindowY !== null };
+});
+
+ipcMain.handle('reset-window-position', () => {
+  if (!mainWindow) return null;
+  customWindowX = null;
+  customWindowY = null;
+  currentYOffset = 6;
+  clearSavedWindowPosition();
   updateWindowPosition();
+  const [x, y] = mainWindow.getPosition();
+  return { x, y };
 });
 
 ipcMain.on('quit-app', () => {

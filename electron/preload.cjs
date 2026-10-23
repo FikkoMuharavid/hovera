@@ -25,5 +25,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => {
     return ipcRenderer.invoke('select-folder');
   },
+  moveWindow: (deltaX, deltaY) => {
+    ipcRenderer.send('move-window', { deltaX, deltaY });
+  },
+  setWindowPosition: (x, y) => {
+    ipcRenderer.send('set-window-position', { x, y });
+  },
+  getWindowPosition: () => {
+    return ipcRenderer.invoke('get-window-position');
+  },
+  resetWindowPosition: () => {
+    return ipcRenderer.invoke('reset-window-position');
+  },
+  onPositionReset: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('window-position-reset', handler);
+    return () => ipcRenderer.removeListener('window-position-reset', handler);
+  },
   isElectron: true,
 });
