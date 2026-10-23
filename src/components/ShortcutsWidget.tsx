@@ -21,6 +21,7 @@ import {
   Building2,
   Clock,
   CheckCircle2,
+  Pin,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import type { ProjectInfo } from '../types/electron';
@@ -143,7 +144,28 @@ export const ShortcutsWidget: React.FC = () => {
     }
     return [];
   });
+  const [pinnedPaths, setPinnedPaths] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('di_pinned_projects');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return [];
+  });
   const [openedToast, setOpenedToast] = useState<string | null>(null);
+
+  const togglePinProject = (path: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    sound.playPop();
+    setPinnedPaths((prev) => {
+      const next = prev.includes(path)
+        ? prev.filter((p) => p !== path)
+        : [path, ...prev];
+      localStorage.setItem('di_pinned_projects', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Load scanned projects from Electron
   useEffect(() => {
@@ -295,6 +317,7 @@ export const ShortcutsWidget: React.FC = () => {
   };
 
   // Filter projects
+  // Filter projects
   const filteredProjects = projects.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(projectSearch.toLowerCase()) ||
@@ -302,6 +325,9 @@ export const ShortcutsWidget: React.FC = () => {
 
     if (!matchesSearch) return false;
 
+    if (selectedCategory === 'pinned') {
+      return pinnedPaths.includes(p.path);
+    }
     if (selectedCategory === 'recent') {
       return recentPaths.includes(p.path);
     }
@@ -309,6 +335,15 @@ export const ShortcutsWidget: React.FC = () => {
       return p.category === selectedCategory;
     }
     return true;
+  });
+
+  // Prioritaskan project yang di-pin agar selalu berada di posisi paling atas
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    const aPinned = pinnedPaths.includes(a.path);
+    const bPinned = pinnedPaths.includes(b.path);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    return a.name.localeCompare(b.name);
   });
 
   return (
@@ -388,6 +423,19 @@ export const ShortcutsWidget: React.FC = () => {
                 >
                   Semua
                 </button>
+                {pinnedPaths.length > 0 && (
+                  <button
+                    onClick={() => setSelectedCategory('pinned')}
+                    className={`flex items-center space-x-1 px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      selectedCategory === 'pinned'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Pin className="w-2.5 h-2.5 fill-current" />
+                    <span>Dipin ({pinnedPaths.length})</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedCategory('Program Kantor')}
                   className={`flex items-center space-x-1 px-2 py-0.5 rounded-md font-medium transition-colors ${
@@ -435,14 +483,19 @@ export const ShortcutsWidget: React.FC = () => {
                 </div>
               )}
 
-              {filteredProjects.length === 0 ? (
+              {sortedProjects.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-zinc-500 text-xs">
                   <Folder className="w-6 h-6 mb-1 opacity-40" />
-                  <span>Tidak ada project yang cocok</span>
+                  <span>
+                    {selectedCategory === 'pinned'
+                      ? 'Belum ada project yang disematkan. Klik ikon jarum 📌 pada project untuk menyematkan.'
+                      : 'Tidak ada project yang cocok'}
+                  </span>
                 </div>
               ) : (
-                filteredProjects.map((p) => {
+                sortedProjects.map((p) => {
                   const isRecent = recentPaths.includes(p.path);
+                  const isPinned = pinnedPaths.includes(p.path);
                   const isKantor = p.category === 'Program Kantor';
                   return (
                     <motion.div
@@ -450,12 +503,18 @@ export const ShortcutsWidget: React.FC = () => {
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}
                       onClick={() => handleOpenProject(p.path, p.name)}
-                      className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-800/80 border border-zinc-800/80 hover:border-zinc-700 cursor-pointer transition-all group shadow-sm"
+                      className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all group shadow-sm ${
+                        isPinned
+                          ? 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/35'
+                          : 'bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800/80 hover:border-zinc-700'
+                      }`}
                     >
                       <div className="flex items-center space-x-2.5 overflow-hidden">
                         <div
                           className={`w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm ${
-                            isKantor
+                            isPinned
+                              ? 'bg-amber-600/80 border border-amber-400/40'
+                              : isKantor
                               ? 'bg-blue-600/80 border border-blue-400/30'
                               : 'bg-purple-600/80 border border-purple-400/30'
                           }`}
@@ -467,7 +526,13 @@ export const ShortcutsWidget: React.FC = () => {
                             <span className="text-xs font-semibold text-zinc-100 group-hover:text-white truncate">
                               {p.name}
                             </span>
-                            {isRecent && (
+                            {isPinned && (
+                              <span className="flex items-center space-x-0.5 px-1.5 py-0.2 rounded-full bg-amber-500/25 text-amber-300 text-[8.5px] font-medium border border-amber-500/40">
+                                <Pin className="w-2 h-2 fill-current" />
+                                <span>Dipin</span>
+                              </span>
+                            )}
+                            {isRecent && !isPinned && (
                               <span className="px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 text-[8.5px] font-mono">
                                 Terakhir
                               </span>
@@ -479,9 +544,24 @@ export const ShortcutsWidget: React.FC = () => {
                         </div>
                       </div>
 
-                      <span className="text-[10px] text-indigo-400 group-hover:text-indigo-300 font-medium px-2 py-0.5 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors shrink-0">
-                        Buka →
-                      </span>
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        {/* Tombol Pin / Sematkan */}
+                        <button
+                          onClick={(e) => togglePinProject(p.path, e)}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            isPinned
+                              ? 'text-amber-400 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40'
+                              : 'text-zinc-500 hover:text-amber-400 hover:bg-zinc-800'
+                          }`}
+                          title={isPinned ? 'Lepas sematan (Unpin)' : 'Sematkan ke atas (Pin)'}
+                        >
+                          <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-current rotate-45' : ''}`} />
+                        </button>
+
+                        <span className="text-[10px] text-indigo-400 group-hover:text-indigo-300 font-medium px-2 py-1 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
+                          Buka →
+                        </span>
+                      </div>
                     </motion.div>
                   );
                 })
