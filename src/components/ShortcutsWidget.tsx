@@ -106,7 +106,19 @@ export const ShortcutsWidget: React.FC = () => {
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(() => {
     try {
       const saved = localStorage.getItem('di_shortcuts');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: ShortcutItem[] = JSON.parse(saved);
+        // Pastikan Antigravity ada di urutan terdepan jika belum ada di data lama
+        if (!parsed.some((s) => s.id === 'antigravity')) {
+          const antigravityItem = DEFAULT_SHORTCUTS.find((s) => s.id === 'antigravity');
+          if (antigravityItem) {
+            const merged = [antigravityItem, ...parsed];
+            localStorage.setItem('di_shortcuts', JSON.stringify(merged));
+            return merged;
+          }
+        }
+        return parsed;
+      }
     } catch {
       // fallback
     }
