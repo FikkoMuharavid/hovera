@@ -5,6 +5,7 @@ import {
   CheckSquare,
   LayoutGrid,
   Timer as TimerIcon,
+  HeartPulse,
   Settings as SettingsIcon,
   ChevronUp,
 } from 'lucide-react';
@@ -13,10 +14,11 @@ import { ClockWidget } from './ClockWidget';
 import { TodoWidget } from './TodoWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
 import { TimerWidget } from './TimerWidget';
+import { StretchWidget } from './StretchWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
 
-type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'timer' | 'settings';
+type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'timer' | 'stretch' | 'settings';
 
 export const DynamicIsland: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -26,6 +28,13 @@ export const DynamicIsland: React.FC = () => {
   const [activeTasksCount, setActiveTasksCount] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
   const [timerRemaining, setTimerRemaining] = useState('25:00');
+
+  // Sedentary & Stretch Reminder
+  const [sittingMinutes, setSittingMinutes] = useState(0);
+  const [reminderInterval, setReminderInterval] = useState(() => {
+    const val = localStorage.getItem('di_stretch_interval');
+    return val ? Number(val) : 45;
+  });
 
   // Preferences
   const [expandOnHover, setExpandOnHover] = useState(() => {
@@ -58,10 +67,29 @@ export const DynamicIsland: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Sitting tracker timer (1 minute interval)
+  useEffect(() => {
+    const tracker = setInterval(() => {
+      setSittingMinutes((prev) => {
+        const next = prev + 1;
+        if (next === reminderInterval) {
+          sound.playSuccess();
+        }
+        return next;
+      });
+    }, 60000);
+    return () => clearInterval(tracker);
+  }, [reminderInterval]);
+
   // Save preferences
   useEffect(() => {
     localStorage.setItem('di_expand_hover', String(expandOnHover));
   }, [expandOnHover]);
+
+  const handleIntervalChange = (mins: number) => {
+    setReminderInterval(mins);
+    localStorage.setItem('di_stretch_interval', String(mins));
+  };
 
   const handleYOffsetChange = (val: number) => {
     setYOffset(val);
@@ -94,7 +122,6 @@ export const DynamicIsland: React.FC = () => {
     }
 
     if (window.electronAPI) {
-      // When cursor leaves the island container, pass-through all clicks
       window.electronAPI.setIgnoreMouseEvents(true);
     }
   };
@@ -109,11 +136,14 @@ export const DynamicIsland: React.FC = () => {
     setActiveTab(tab);
   };
 
+  const isStretchAlert = sittingMinutes >= reminderInterval;
+
   const tabs = [
     { id: 'clock', label: 'Waktu', icon: ClockIcon },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
     { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
     { id: 'timer', label: 'Timer', icon: TimerIcon, activeIndicator: timerActive },
+    { id: 'stretch', label: 'Regang', icon: HeartPulse, activeIndicator: isStretchAlert },
     { id: 'settings', label: 'Setelan', icon: SettingsIcon },
   ];
 
@@ -126,8 +156,8 @@ export const DynamicIsland: React.FC = () => {
       <motion.div
         ref={islandRef}
         animate={{
-          width: isExpanded ? 500 : 220,
-          height: isExpanded ? 285 : 36,
+          width: isExpanded ? 510 : 220,
+          height: isExpanded ? 295 : 36,
           borderRadius: isExpanded ? 32 : 18,
         }}
         transition={{
@@ -159,6 +189,7 @@ export const DynamicIsland: React.FC = () => {
                 activeTasksCount={activeTasksCount}
                 timerActive={timerActive}
                 timerRemaining={timerRemaining}
+                isStretchAlert={isStretchAlert}
                 onClick={toggleExpand}
               />
             </motion.div>
@@ -175,9 +206,9 @@ export const DynamicIsland: React.FC = () => {
               transition={{ duration: 0.12 }}
               className="absolute inset-0 p-4 flex flex-col justify-between"
             >
-              {/* Top Navigation Bar */}
+              {/* Top Navigation Bar with Pixel-Perfect Symmetrical Padding */}
               <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800/60">
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-0.5">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = activeTab === tab.id;
@@ -185,27 +216,29 @@ export const DynamicIsland: React.FC = () => {
                       <button
                         key={tab.id}
                         onClick={() => handleTabSelect(tab.id as ActiveTab)}
-                        className={`relative flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs transition-colors ${
+                        className={`relative inline-flex items-center justify-center px-2.5 py-1 rounded-full transition-colors select-none ${
                           isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
                         {isActive && (
                           <motion.div
                             layoutId="active-tab-bubble"
-                            className="absolute inset-0 bg-zinc-800 rounded-full border border-zinc-700/60"
+                            className="absolute inset-0 bg-zinc-800 rounded-full border border-zinc-700/60 shadow-sm"
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <span className="relative z-10 flex items-center space-x-1">
-                          <Icon className="w-3.5 h-3.5" />
-                          <span className="font-medium text-[11px]">{tab.label}</span>
+                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none">
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="font-medium text-[11px] leading-none pt-0.5">
+                            {tab.label}
+                          </span>
                           {tab.badge !== undefined && tab.badge > 0 && (
                             <span className="px-1 py-0.2 rounded-full bg-sky-500 text-[9px] font-mono font-bold text-black">
                               {tab.badge}
                             </span>
                           )}
                           {tab.activeIndicator && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
                           )}
                         </span>
                       </button>
@@ -238,6 +271,15 @@ export const DynamicIsland: React.FC = () => {
                         setTimerActive(active);
                         setTimerRemaining(remaining);
                       }}
+                    />
+                  )}
+                  {activeTab === 'stretch' && (
+                    <StretchWidget
+                      key="stretch"
+                      sittingMinutes={sittingMinutes}
+                      onResetSitting={() => setSittingMinutes(0)}
+                      reminderInterval={reminderInterval}
+                      onIntervalChange={handleIntervalChange}
                     />
                   )}
                   {activeTab === 'settings' && (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle2, Timer as TimerIcon } from 'lucide-react';
+import { Calendar, CheckCircle2, Timer as TimerIcon, HeartPulse } from 'lucide-react';
 
 interface CompactViewProps {
   currentTime: string;
@@ -8,6 +8,7 @@ interface CompactViewProps {
   activeTasksCount: number;
   timerActive: boolean;
   timerRemaining: string;
+  isStretchAlert?: boolean;
   onClick: () => void;
 }
 
@@ -17,6 +18,7 @@ export const CompactView: React.FC<CompactViewProps> = ({
   activeTasksCount,
   timerActive,
   timerRemaining,
+  isStretchAlert = false,
   onClick,
 }) => {
   return (
@@ -36,13 +38,20 @@ export const CompactView: React.FC<CompactViewProps> = ({
         </span>
       </div>
 
-      {/* Center: Active Task Indicator (if any) */}
-      {activeTasksCount > 0 && (
-        <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-zinc-800/90 border border-zinc-700/60 text-[10px] text-zinc-300 font-mono">
-          <CheckCircle2 className="w-2.5 h-2.5 text-sky-400" />
-          <span>{activeTasksCount}</span>
-        </div>
-      )}
+      {/* Center: Stretch Alert or Task Indicator */}
+      <div className="flex items-center space-x-1">
+        {isStretchAlert ? (
+          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-[9px] text-rose-300 font-medium animate-pulse">
+            <HeartPulse className="w-2.5 h-2.5" />
+            <span>Regang</span>
+          </div>
+        ) : activeTasksCount > 0 ? (
+          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-zinc-800/90 border border-zinc-700/60 text-[10px] text-zinc-300 font-mono">
+            <CheckCircle2 className="w-2.5 h-2.5 text-sky-400" />
+            <span>{activeTasksCount}</span>
+          </div>
+        ) : null}
+      </div>
 
       {/* Trailing Right: Clock or Active Timer */}
       <div>
