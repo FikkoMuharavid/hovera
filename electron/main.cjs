@@ -127,6 +127,16 @@ function createMainWindow() {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
 
+  // Auto-grant media/audio permissions for speech recording
+  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission) => {
+    if (permission === 'media') return true;
+    return true;
+  });
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') return callback(true);
+    return callback(true);
+  });
+
   loadSavedWindowPosition();
   updateWindowPosition();
 
@@ -371,6 +381,33 @@ ipcMain.handle('select-folder', async () => {
   } catch (err) {
     console.error('Failed to select folder:', err);
     return null;
+  }
+});
+
+ipcMain.handle('save-note-file', async (event, { title, content, format }) => {
+  try {
+    const { dialog } = require('electron');
+    const fs = require('fs');
+    const ext = format === 'md' ? 'md' : 'txt';
+    const sanitizedTitle = (title || 'Catatan_Meeting').replace(/[\\/:*?"<>|]/g, '_');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Catatan Meeting',
+      defaultPath: `${sanitizedTitle}.${ext}`,
+      filters: [
+        format === 'md'
+          ? { name: 'Markdown File', extensions: ['md'] }
+          : { name: 'Text File', extensions: ['txt'] },
+        { name: 'Semua File', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePath) {
+      fs.writeFileSync(result.filePath, content, 'utf8');
+      return { success: true, filePath: result.filePath };
+    }
+    return { success: false, canceled: true };
+  } catch (err) {
+    console.error('Failed to save note file:', err);
+    return { success: false, error: err.message };
   }
 });
 

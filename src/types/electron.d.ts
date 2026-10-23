@@ -19,6 +19,11 @@ export interface ElectronAPI {
   getWindowPosition?: () => Promise<{ x: number; y: number; isCustom?: boolean } | null>;
   resetWindowPosition?: () => Promise<{ x: number; y: number } | null>;
   onPositionReset?: (callback: () => void) => () => void;
+  saveNoteFile?: (params: {
+    title: string;
+    content: string;
+    format: 'txt' | 'md';
+  }) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
 }
 
 declare global {

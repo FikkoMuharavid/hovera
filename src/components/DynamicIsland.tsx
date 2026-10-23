@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clock as ClockIcon,
   CheckSquare,
+  FileText,
   LayoutGrid,
   HeartPulse,
   Settings as SettingsIcon,
@@ -12,13 +13,14 @@ import confetti from 'canvas-confetti';
 import { CompactView } from './CompactView';
 import { TimeHubWidget } from './TimeHubWidget';
 import { TodoWidget } from './TodoWidget';
+import { NotesWidget, type MeetingNote } from './NotesWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
 import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
 import { getAnniversaryCalculations } from '../utils/anniversary';
 
-type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'health' | 'settings';
+type ActiveTab = 'clock' | 'todo' | 'notes' | 'shortcuts' | 'health' | 'settings';
 
 export const DynamicIsland: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -144,6 +146,185 @@ export const DynamicIsland: React.FC = () => {
     return `${m}:${s}`;
   };
   const compactStopwatchFormatted = formatStopwatchCompact(stopwatchMs);
+
+  // ================= NOTES & SPEECH TO TEXT =================
+  const [notes, setNotes] = useState<MeetingNote[]>(() => {
+    try {
+      const saved = localStorage.getItem('di_meeting_notes');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return [
+      {
+        id: 'sample-1',
+        title: 'Notula Rapat Tim Proyek',
+        content:
+          'Pembahasan fitur baru Dynamic Island:\n- Integrasi pintasan aplikasi & website kerja favorit.\n- Fitur stopwatch presisi & pengingat fokus Pomodoro.\n- Fitur Speech to Text untuk transkrip rapat offline maupun online secara langsung.\n- Fitur simpan ke catatan dan ekspor ke file teks (.TXT) maupun Markdown (.MD).',
+        createdAt: Date.now() - 3600000 * 2,
+        updatedAt: Date.now() - 3600000 * 2,
+        durationSeconds: 145,
+        language: 'id-ID',
+      },
+    ];
+  });
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [speechLanguage, setSpeechLanguage] = useState<'id-ID' | 'en-US'>('id-ID');
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
+  const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef<boolean>(false);
+  const accumulatedTranscriptRef = useRef<string>('');
+  const recordingIntervalRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (isRecording) {
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+    }
+    return () => {
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+    };
+  }, [isRecording]);
+
+  const handleStartRecording = async () => {
+    sound.playClick();
+    setSpeechError(null);
+    const SpeechRecognitionAPI =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      setSpeechError('Web Speech API tidak didukung pada sistem ini.');
+      return;
+    }
+
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+    } catch {
+      setSpeechError('Akses mikrofon ditolak atau mikrofon tidak terdeteksi.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionAPI();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = speechLanguage;
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        let final = accumulatedTranscriptRef.current;
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            final += (final ? ' ' : '') + chunk;
+          } else {
+            interim += chunk;
+          }
+        }
+        accumulatedTranscriptRef.current = final;
+        const currentTotal = final + (interim ? (final ? ' ' : '') + interim : '');
+        setLiveTranscript(currentTotal);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('SpeechRecognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          setSpeechError('Izin mikrofon ditolak.');
+          handleStopRecording();
+        } else if (event.error === 'network') {
+          setSpeechError('Koneksi internet diperlukan untuk Google Speech-to-Text.');
+        } else if (event.error !== 'no-speech') {
+          setSpeechError(`Error pengenalan suara: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            // Already active
+          }
+        }
+      };
+
+      accumulatedTranscriptRef.current = liveTranscript;
+      recognitionRef.current = recognition;
+      isRecordingRef.current = true;
+      recognition.start();
+      setIsRecording(true);
+    } catch (e: any) {
+      setSpeechError(`Gagal memulai mikrofon: ${e.message || e}`);
+    }
+  };
+
+  const handleStopRecording = () => {
+    sound.playPop();
+    isRecordingRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+
+    const transcriptText = (liveTranscript || accumulatedTranscriptRef.current).trim();
+    if (transcriptText) {
+      const newNote: MeetingNote = {
+        id: Date.now().toString(),
+        title: `Transkrip Rapat ${new Date().toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}`,
+        content: transcriptText,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        durationSeconds: recordingSeconds,
+        language: speechLanguage,
+      };
+      const updated = [newNote, ...notes];
+      setNotes(updated);
+      localStorage.setItem('di_meeting_notes', JSON.stringify(updated));
+      sound.playSuccess();
+    }
+  };
+
+  const handleClearLiveTranscript = () => {
+    sound.playPop();
+    accumulatedTranscriptRef.current = '';
+    setLiveTranscript('');
+    setRecordingSeconds(0);
+  };
+
+  const handleSaveNote = (note: MeetingNote) => {
+    const updated = [note, ...notes];
+    setNotes(updated);
+    localStorage.setItem('di_meeting_notes', JSON.stringify(updated));
+  };
+
+  const handleDeleteNote = (id: string) => {
+    const updated = notes.filter((n) => n.id !== id);
+    setNotes(updated);
+    localStorage.setItem('di_meeting_notes', JSON.stringify(updated));
+  };
+
+  const handleUpdateNote = (updatedNote: MeetingNote) => {
+    const updated = notes.map((n) => (n.id === updatedNote.id ? updatedNote : n));
+    setNotes(updated);
+    localStorage.setItem('di_meeting_notes', JSON.stringify(updated));
+  };
 
   // ================= STRETCH TIMER =================
   const [stretchInterval, setStretchInterval] = useState(() => {
@@ -478,6 +659,7 @@ export const DynamicIsland: React.FC = () => {
     annivCalc.isMensiveToday ||
     (showAlwaysAnniv ? true : annivCalc.isMensiveApproaching);
 
+  const hasRecording = isRecording;
   const hasWater = isWaterAlert;
   const hasStretch = isStretchAlert;
   const hasTimer = isTimerRunning;
@@ -492,6 +674,7 @@ export const DynamicIsland: React.FC = () => {
     (annivCalc.isMensiveApproaching || (annivCalc.daysUntilMensive !== undefined && annivCalc.daysUntilMensive <= 3));
 
   const notificationCount =
+    (hasRecording ? 1 : 0) +
     (hasWater ? 1 : 0) +
     (hasStretch ? 1 : 0) +
     (hasTimer ? 1 : 0) +
@@ -500,8 +683,9 @@ export const DynamicIsland: React.FC = () => {
     (hasAnniv || hasMensive || hasApproachingAnniv ? 1 : 0);
 
   const compactWidth = (() => {
-    if (notificationCount >= 3) return 320;
-    if (notificationCount === 2) return 285;
+    if (notificationCount >= 3) return 330;
+    if (notificationCount === 2) return 290;
+    if (hasRecording) return 245;
     if (hasWater || hasStretch) return 240;
     if (hasAnniv || hasMensive || hasApproachingAnniv) return 235;
     if (hasTimer || hasStopwatch) return 230;
@@ -522,6 +706,13 @@ export const DynamicIsland: React.FC = () => {
         annivCalc.isMensiveApproaching,
     },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
+    {
+      id: 'notes',
+      label: 'Catatan',
+      icon: FileText,
+      badge: notes.length > 0 ? notes.length : undefined,
+      activeIndicator: isRecording,
+    },
     { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
     {
       id: 'health',
@@ -545,8 +736,8 @@ export const DynamicIsland: React.FC = () => {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         animate={{
-          width: isExpanded ? 510 : compactWidth,
-          height: isExpanded ? 295 : 36,
+          width: isExpanded ? 525 : compactWidth,
+          height: isExpanded ? 310 : 36,
           borderRadius: isExpanded ? 32 : 18,
         }}
         transition={{
@@ -582,6 +773,8 @@ export const DynamicIsland: React.FC = () => {
                 timerRemaining={timerRemaining}
                 stopwatchActive={isStopwatchRunning}
                 stopwatchTime={compactStopwatchFormatted}
+                isRecording={isRecording}
+                recordingSeconds={recordingSeconds}
                 isStretchAlert={isStretchAlert}
                 isWaterAlert={isWaterAlert}
                 isAnnivToday={annivCalc.isAnnivToday}
@@ -605,9 +798,9 @@ export const DynamicIsland: React.FC = () => {
               transition={{ duration: 0.12 }}
               className="absolute inset-0 p-4 flex flex-col justify-between"
             >
-              {/* Top Navigation Bar with 5 Clean Tabs */}
+              {/* Top Navigation Bar with 6 Clean Tabs */}
               <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800/60">
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-0.5">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = activeTab === tab.id;
@@ -615,7 +808,7 @@ export const DynamicIsland: React.FC = () => {
                       <button
                         key={tab.id}
                         onClick={() => handleTabSelect(tab.id as ActiveTab)}
-                        className={`relative inline-flex items-center justify-center px-3 py-1 rounded-full transition-colors select-none ${
+                        className={`relative inline-flex items-center justify-center px-2.5 py-1 rounded-full transition-colors select-none ${
                           isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
@@ -626,7 +819,7 @@ export const DynamicIsland: React.FC = () => {
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none">
+                        <span className="relative z-10 inline-flex items-center justify-center gap-1 leading-none">
                           <Icon className="w-3.5 h-3.5 shrink-0" />
                           <span className="font-medium text-[11px] leading-none pt-0.5">
                             {tab.label}
@@ -637,7 +830,13 @@ export const DynamicIsland: React.FC = () => {
                             </span>
                           )}
                           {tab.activeIndicator && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                                tab.id === 'notes' && isRecording
+                                  ? 'bg-red-500'
+                                  : 'bg-amber-400'
+                              }`}
+                            />
                           )}
                         </span>
                       </button>
@@ -682,6 +881,24 @@ export const DynamicIsland: React.FC = () => {
                   )}
                   {activeTab === 'todo' && (
                     <TodoWidget key="todo" onTasksUpdate={setActiveTasksCount} />
+                  )}
+                  {activeTab === 'notes' && (
+                    <NotesWidget
+                      key="notes"
+                      notes={notes}
+                      onSaveNote={handleSaveNote}
+                      onDeleteNote={handleDeleteNote}
+                      onUpdateNote={handleUpdateNote}
+                      isRecording={isRecording}
+                      recordingSeconds={recordingSeconds}
+                      liveTranscript={liveTranscript}
+                      speechLanguage={speechLanguage}
+                      onToggleSpeechLanguage={setSpeechLanguage}
+                      onStartRecording={handleStartRecording}
+                      onStopRecording={handleStopRecording}
+                      onClearLiveTranscript={handleClearLiveTranscript}
+                      speechError={speechError}
+                    />
                   )}
                   {activeTab === 'shortcuts' && <ShortcutsWidget key="shortcuts" />}
                   {activeTab === 'health' && (

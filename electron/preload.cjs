@@ -42,5 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('window-position-reset', handler);
     return () => ipcRenderer.removeListener('window-position-reset', handler);
   },
+  saveNoteFile: (params) => {
+    return ipcRenderer.invoke('save-note-file', params);
+  },
   isElectron: true,
 });

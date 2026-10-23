@@ -18,6 +18,8 @@ interface CompactViewProps {
   timerRemaining: string;
   stopwatchActive?: boolean;
   stopwatchTime?: string;
+  isRecording?: boolean;
+  recordingSeconds?: number;
   isStretchAlert?: boolean;
   isWaterAlert?: boolean;
   isAnnivToday?: boolean;
@@ -36,6 +38,8 @@ export const CompactView: React.FC<CompactViewProps> = ({
   timerRemaining,
   stopwatchActive = false,
   stopwatchTime = '',
+  isRecording = false,
+  recordingSeconds = 0,
   isStretchAlert = false,
   isWaterAlert = false,
   isAnnivToday = false,
@@ -46,6 +50,7 @@ export const CompactView: React.FC<CompactViewProps> = ({
   onClick,
 }) => {
   // Hanya aktif jika memang ada badge notifikasi yang akan ditampilkan
+  const hasRecording = isRecording;
   const hasWater = isWaterAlert;
   const hasStretch = isStretchAlert;
   const hasTimer = timerActive;
@@ -60,7 +65,15 @@ export const CompactView: React.FC<CompactViewProps> = ({
     (isMensiveApproaching || (daysUntilMensive !== undefined && daysUntilMensive <= 3));
 
   const hasAnyReminder =
-    hasWater || hasStretch || hasTimer || hasStopwatch || hasTasks || hasAnniv || hasMensive || hasApproachingAnniv;
+    hasRecording ||
+    hasWater ||
+    hasStretch ||
+    hasTimer ||
+    hasStopwatch ||
+    hasTasks ||
+    hasAnniv ||
+    hasMensive ||
+    hasApproachingAnniv;
 
   return (
     <motion.div
@@ -112,6 +125,17 @@ export const CompactView: React.FC<CompactViewProps> = ({
               <Heart className="w-2.5 h-2.5 fill-current text-rose-400 shrink-0" />
               <span>
                 {daysUntilMensive !== undefined ? `H-${daysUntilMensive} Mensive` : '14 Feb'}
+              </span>
+            </div>
+          )}
+
+          {/* Indikator Perekaman Suara ke Teks (Meeting Recording) */}
+          {hasRecording && (
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-[9.5px] text-red-300 font-medium tabular-nums shadow-sm leading-none animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+              <span>
+                Rec {Math.floor(recordingSeconds / 60)}:
+                {(recordingSeconds % 60).toString().padStart(2, '0')}
               </span>
             </div>
           )}
