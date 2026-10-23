@@ -14,11 +14,11 @@ import { ClockWidget } from './ClockWidget';
 import { TodoWidget } from './TodoWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
 import { TimerWidget } from './TimerWidget';
-import { StretchWidget } from './StretchWidget';
+import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
 
-type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'timer' | 'stretch' | 'settings';
+type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'timer' | 'health' | 'settings';
 
 export const DynamicIsland: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -29,8 +29,8 @@ export const DynamicIsland: React.FC = () => {
   const [timerActive, setTimerActive] = useState(false);
   const [timerRemaining, setTimerRemaining] = useState('25:00');
 
-  // Sedentary & Stretch Reminder with Automatic Timer
-  const [reminderInterval, setReminderInterval] = useState(() => {
+  // ================= STRETCH TIMER =================
+  const [stretchInterval, setStretchInterval] = useState(() => {
     const val = localStorage.getItem('di_stretch_interval');
     return val ? Number(val) : 45;
   });
@@ -38,8 +38,32 @@ export const DynamicIsland: React.FC = () => {
     const val = localStorage.getItem('di_stretch_interval');
     return (val ? Number(val) : 45) * 60;
   });
-  const [autoAlertEnabled, setAutoAlertEnabled] = useState(() => {
+  const [autoStretchAlert, setAutoStretchAlert] = useState(() => {
     return localStorage.getItem('di_stretch_auto_alert') !== 'false';
+  });
+
+  // ================= WATER INTAKE & TIMER =================
+  const [waterGlasses, setWaterGlasses] = useState(() => {
+    const savedDate = localStorage.getItem('di_water_date');
+    const today = new Date().toDateString();
+    if (savedDate !== today) {
+      localStorage.setItem('di_water_date', today);
+      localStorage.setItem('di_water_glasses', '0');
+      return 0;
+    }
+    const val = localStorage.getItem('di_water_glasses');
+    return val ? Number(val) : 0;
+  });
+  const [waterInterval, setWaterInterval] = useState(() => {
+    const val = localStorage.getItem('di_water_interval');
+    return val ? Number(val) : 60;
+  });
+  const [waterSecondsLeft, setWaterSecondsLeft] = useState(() => {
+    const val = localStorage.getItem('di_water_interval');
+    return (val ? Number(val) : 60) * 60;
+  });
+  const [autoWaterAlert, setAutoWaterAlert] = useState(() => {
+    return localStorage.getItem('di_water_auto_alert') !== 'false';
   });
 
   // Preferences
@@ -75,25 +99,42 @@ export const DynamicIsland: React.FC = () => {
 
   // Automatic stretch countdown timer (every 1 second)
   useEffect(() => {
-    if (!autoAlertEnabled) return;
+    if (!autoStretchAlert) return;
     const stretchTimer = setInterval(() => {
       setStretchSecondsLeft((prev) => {
         if (prev <= 1) {
           sound.playSuccess();
-          // Automatically expand Dynamic Island to Stretch tab!
           setIsExpanded(true);
-          setActiveTab('stretch');
+          setActiveTab('health');
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(stretchTimer);
-  }, [autoAlertEnabled]);
+  }, [autoStretchAlert]);
 
+  // Automatic water countdown timer (every 1 second)
+  useEffect(() => {
+    if (!autoWaterAlert) return;
+    const waterTimer = setInterval(() => {
+      setWaterSecondsLeft((prev) => {
+        if (prev <= 1) {
+          sound.playWaterDrop();
+          setIsExpanded(true);
+          setActiveTab('health');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(waterTimer);
+  }, [autoWaterAlert]);
+
+  // Stretch Handlers
   const handleResetStretch = () => {
     sound.playSuccess();
-    setStretchSecondsLeft(reminderInterval * 60);
+    setStretchSecondsLeft(stretchInterval * 60);
   };
 
   const handleSnoozeStretch = (minutes: number) => {
@@ -102,16 +143,65 @@ export const DynamicIsland: React.FC = () => {
   };
 
   const handleStretchIntervalChange = (mins: number) => {
-    setReminderInterval(mins);
+    setStretchInterval(mins);
     setStretchSecondsLeft(mins * 60);
     localStorage.setItem('di_stretch_interval', String(mins));
   };
 
-  const handleToggleAutoAlert = () => {
-    const nextVal = !autoAlertEnabled;
-    setAutoAlertEnabled(nextVal);
+  const handleToggleAutoStretchAlert = () => {
+    const nextVal = !autoStretchAlert;
+    setAutoStretchAlert(nextVal);
     localStorage.setItem('di_stretch_auto_alert', String(nextVal));
   };
+
+  // Water Handlers
+  const handleAddWaterGlass = () => {
+    setWaterGlasses((prev) => {
+      const next = Math.min(16, prev + 1);
+      localStorage.setItem('di_water_glasses', String(next));
+      localStorage.setItem('di_water_date', new Date().toDateString());
+      return next;
+    });
+  };
+
+  const handleRemoveWaterGlass = () => {
+    setWaterGlasses((prev) => {
+      const next = Math.max(0, prev - 1);
+      localStorage.setItem('di_water_glasses', String(next));
+      return next;
+    });
+  };
+
+  const handleResetWater = () => {
+    setWaterGlasses(0);
+    localStorage.setItem('di_water_glasses', '0');
+  };
+
+  const handleResetWaterTimer = () => {
+    setWaterSecondsLeft(waterInterval * 60);
+  };
+
+  const handleSnoozeWaterTimer = (mins: number) => {
+    sound.playClick();
+    setWaterSecondsLeft(mins * 60);
+  };
+
+  const handleWaterIntervalChange = (mins: number) => {
+    setWaterInterval(mins);
+    setWaterSecondsLeft(mins * 60);
+    localStorage.setItem('di_water_interval', String(mins));
+  };
+
+  const handleToggleAutoWaterAlert = () => {
+    const nextVal = !autoWaterAlert;
+    setAutoWaterAlert(nextVal);
+    localStorage.setItem('di_water_auto_alert', String(nextVal));
+  };
+
+  // Preferences
+  useEffect(() => {
+    localStorage.setItem('di_expand_hover', String(expandOnHover));
+  }, [expandOnHover]);
 
   const handleYOffsetChange = (val: number) => {
     setYOffset(val);
@@ -159,13 +249,14 @@ export const DynamicIsland: React.FC = () => {
   };
 
   const isStretchAlert = stretchSecondsLeft === 0;
+  const isWaterAlert = waterSecondsLeft === 0;
 
   const tabs = [
     { id: 'clock', label: 'Waktu', icon: ClockIcon },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
     { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
     { id: 'timer', label: 'Timer', icon: TimerIcon, activeIndicator: timerActive },
-    { id: 'stretch', label: 'Regang', icon: HeartPulse, activeIndicator: isStretchAlert },
+    { id: 'health', label: 'Sehat', icon: HeartPulse, activeIndicator: isStretchAlert || isWaterAlert },
     { id: 'settings', label: 'Setelan', icon: SettingsIcon },
   ];
 
@@ -212,6 +303,7 @@ export const DynamicIsland: React.FC = () => {
                 timerActive={timerActive}
                 timerRemaining={timerRemaining}
                 isStretchAlert={isStretchAlert}
+                isWaterAlert={isWaterAlert}
                 onClick={toggleExpand}
               />
             </motion.div>
@@ -228,7 +320,7 @@ export const DynamicIsland: React.FC = () => {
               transition={{ duration: 0.12 }}
               className="absolute inset-0 p-4 flex flex-col justify-between"
             >
-              {/* Top Navigation Bar with Pixel-Perfect Symmetrical Padding */}
+              {/* Top Navigation Bar with Symmetrical Padding */}
               <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800/60">
                 <div className="flex items-center space-x-0.5">
                   {tabs.map((tab) => {
@@ -260,7 +352,7 @@ export const DynamicIsland: React.FC = () => {
                             </span>
                           )}
                           {tab.activeIndicator && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
                           )}
                         </span>
                       </button>
@@ -295,16 +387,28 @@ export const DynamicIsland: React.FC = () => {
                       }}
                     />
                   )}
-                  {activeTab === 'stretch' && (
-                    <StretchWidget
-                      key="stretch"
+                  {activeTab === 'health' && (
+                    <HealthWidget
+                      key="health"
                       stretchSecondsLeft={stretchSecondsLeft}
-                      totalIntervalMinutes={reminderInterval}
-                      onResetTimer={handleResetStretch}
-                      onSnoozeTimer={handleSnoozeStretch}
-                      onIntervalChange={handleStretchIntervalChange}
-                      autoAlertEnabled={autoAlertEnabled}
-                      onToggleAutoAlert={handleToggleAutoAlert}
+                      totalStretchInterval={stretchInterval}
+                      onResetStretch={handleResetStretch}
+                      onSnoozeStretch={handleSnoozeStretch}
+                      onStretchIntervalChange={handleStretchIntervalChange}
+                      autoStretchAlert={autoStretchAlert}
+                      onToggleAutoStretchAlert={handleToggleAutoStretchAlert}
+                      waterGlasses={waterGlasses}
+                      onAddWaterGlass={handleAddWaterGlass}
+                      onRemoveWaterGlass={handleRemoveWaterGlass}
+                      onResetWater={handleResetWater}
+                      waterSecondsLeft={waterSecondsLeft}
+                      totalWaterInterval={waterInterval}
+                      onResetWaterTimer={handleResetWaterTimer}
+                      onSnoozeWaterTimer={handleSnoozeWaterTimer}
+                      onWaterIntervalChange={handleWaterIntervalChange}
+                      autoWaterAlert={autoWaterAlert}
+                      onToggleAutoWaterAlert={handleToggleAutoWaterAlert}
+                      initialTab={isWaterAlert ? 'water' : 'stretch'}
                     />
                   )}
                   {activeTab === 'settings' && (

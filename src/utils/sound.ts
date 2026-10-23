@@ -113,6 +113,34 @@ class SoundEffects {
       // Silent error
     }
   }
+
+  // Organic water droplet sound
+  public playWaterDrop() {
+    if (!this.enabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      const now = this.ctx.currentTime;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(1600, now + 0.05);
+      osc.frequency.exponentialRampToValueAtTime(700, now + 0.12);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.13);
+    } catch {
+      // AudioContext silenced
+    }
+  }
 }
 
 export const sound = new SoundEffects();

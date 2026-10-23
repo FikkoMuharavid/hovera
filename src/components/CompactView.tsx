@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle2, Timer as TimerIcon, HeartPulse } from 'lucide-react';
+import { Calendar, CheckCircle2, Timer as TimerIcon, HeartPulse, Droplets } from 'lucide-react';
 
 interface CompactViewProps {
   currentTime: string;
@@ -9,6 +9,7 @@ interface CompactViewProps {
   timerActive: boolean;
   timerRemaining: string;
   isStretchAlert?: boolean;
+  isWaterAlert?: boolean;
   onClick: () => void;
 }
 
@@ -19,6 +20,7 @@ export const CompactView: React.FC<CompactViewProps> = ({
   timerActive,
   timerRemaining,
   isStretchAlert = false,
+  isWaterAlert = false,
   onClick,
 }) => {
   return (
@@ -38,9 +40,14 @@ export const CompactView: React.FC<CompactViewProps> = ({
         </span>
       </div>
 
-      {/* Center: Stretch Alert or Task Indicator */}
+      {/* Center: Water Alert, Stretch Alert, or Task Indicator */}
       <div className="flex items-center space-x-1">
-        {isStretchAlert ? (
+        {isWaterAlert ? (
+          <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-500/40 text-[9px] text-sky-300 font-medium animate-pulse">
+            <Droplets className="w-2.5 h-2.5 fill-current" />
+            <span>Minum</span>
+          </div>
+        ) : isStretchAlert ? (
           <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-[9px] text-rose-300 font-medium animate-pulse">
             <HeartPulse className="w-2.5 h-2.5" />
             <span>Regang</span>
