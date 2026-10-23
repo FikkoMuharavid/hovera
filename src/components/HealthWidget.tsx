@@ -629,7 +629,7 @@ export const HealthWidget: React.FC<HealthWidgetProps> = ({
                     className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-semibold text-xs shadow-md transition-all active:scale-95"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>+ Minum 1 Gelas</span>
+                    <span>Minum 1 Gelas</span>
                   </button>
                 </div>
               </div>
