@@ -16,6 +16,8 @@ interface CompactViewProps {
   activeTasksCount: number;
   timerActive: boolean;
   timerRemaining: string;
+  stopwatchActive?: boolean;
+  stopwatchTime?: string;
   isStretchAlert?: boolean;
   isWaterAlert?: boolean;
   isAnnivToday?: boolean;
@@ -32,6 +34,8 @@ export const CompactView: React.FC<CompactViewProps> = ({
   activeTasksCount,
   timerActive,
   timerRemaining,
+  stopwatchActive = false,
+  stopwatchTime = '',
   isStretchAlert = false,
   isWaterAlert = false,
   isAnnivToday = false,
@@ -45,6 +49,7 @@ export const CompactView: React.FC<CompactViewProps> = ({
   const hasWater = isWaterAlert;
   const hasStretch = isStretchAlert;
   const hasTimer = timerActive;
+  const hasStopwatch = stopwatchActive;
   const hasTasks = activeTasksCount > 0;
   const hasAnniv = isAnnivToday;
   const hasMensive = !isAnnivToday && isMensiveToday;
@@ -55,7 +60,7 @@ export const CompactView: React.FC<CompactViewProps> = ({
     (isMensiveApproaching || (daysUntilMensive !== undefined && daysUntilMensive <= 3));
 
   const hasAnyReminder =
-    hasWater || hasStretch || hasTimer || hasTasks || hasAnniv || hasMensive || hasApproachingAnniv;
+    hasWater || hasStretch || hasTimer || hasStopwatch || hasTasks || hasAnniv || hasMensive || hasApproachingAnniv;
 
   return (
     <motion.div
@@ -135,6 +140,14 @@ export const CompactView: React.FC<CompactViewProps> = ({
                 style={{ animationDuration: '4s' }}
               />
               <span>{timerRemaining}</span>
+            </div>
+          )}
+
+          {/* Stopwatch Aktif */}
+          {hasStopwatch && (
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] text-emerald-300 font-medium tabular-nums leading-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span>{stopwatchTime}</span>
             </div>
           )}
 

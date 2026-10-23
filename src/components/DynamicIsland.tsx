@@ -94,6 +94,57 @@ export const DynamicIsland: React.FC = () => {
     setTimerSecondsLeft(minutes * 60);
   };
 
+  // ================= STOPWATCH =================
+  const [stopwatchMs, setStopwatchMs] = useState(0);
+  const [isStopwatchRunning, setIsStopwatchRunning] = useState(false);
+  const [stopwatchLaps, setStopwatchLaps] = useState<Array<{ id: number; timeMs: number; splitMs: number }>>([]);
+  const stopwatchStartTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    if (isStopwatchRunning) {
+      stopwatchStartTimeRef.current = Date.now() - stopwatchMs;
+      intervalId = setInterval(() => {
+        setStopwatchMs(Date.now() - stopwatchStartTimeRef.current);
+      }, 30);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isStopwatchRunning]);
+
+  const handleToggleStopwatch = () => {
+    sound.playClick();
+    setIsStopwatchRunning(!isStopwatchRunning);
+  };
+
+  const handleResetStopwatch = () => {
+    sound.playPop();
+    setIsStopwatchRunning(false);
+    setStopwatchMs(0);
+    setStopwatchLaps([]);
+  };
+
+  const handleLapStopwatch = () => {
+    sound.playPop();
+    const lastLapTotal = stopwatchLaps.length > 0 ? stopwatchLaps[0].timeMs : 0;
+    const split = stopwatchMs - lastLapTotal;
+    const newLap = {
+      id: stopwatchLaps.length + 1,
+      timeMs: stopwatchMs,
+      splitMs: split > 0 ? split : stopwatchMs,
+    };
+    setStopwatchLaps([newLap, ...stopwatchLaps]);
+  };
+
+  const formatStopwatchCompact = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const s = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+  const compactStopwatchFormatted = formatStopwatchCompact(stopwatchMs);
+
   // ================= STRETCH TIMER =================
   const [stretchInterval, setStretchInterval] = useState(() => {
     const val = localStorage.getItem('di_stretch_interval');
@@ -430,6 +481,7 @@ export const DynamicIsland: React.FC = () => {
   const hasWater = isWaterAlert;
   const hasStretch = isStretchAlert;
   const hasTimer = isTimerRunning;
+  const hasStopwatch = isStopwatchRunning;
   const hasTasks = activeTasksCount > 0;
   const hasAnniv = annivCalc.isAnnivToday;
   const hasMensive = !annivCalc.isAnnivToday && annivCalc.isMensiveToday;
@@ -443,15 +495,16 @@ export const DynamicIsland: React.FC = () => {
     (hasWater ? 1 : 0) +
     (hasStretch ? 1 : 0) +
     (hasTimer ? 1 : 0) +
+    (hasStopwatch ? 1 : 0) +
     (hasTasks ? 1 : 0) +
     (hasAnniv || hasMensive || hasApproachingAnniv ? 1 : 0);
 
   const compactWidth = (() => {
-    if (notificationCount >= 3) return 310;
-    if (notificationCount === 2) return 275;
+    if (notificationCount >= 3) return 320;
+    if (notificationCount === 2) return 285;
     if (hasWater || hasStretch) return 240;
     if (hasAnniv || hasMensive || hasApproachingAnniv) return 235;
-    if (hasTimer) return 230;
+    if (hasTimer || hasStopwatch) return 230;
     if (hasTasks) return 215;
     return 168; // Symmetrically centered when no reminders active
   })();
@@ -463,6 +516,7 @@ export const DynamicIsland: React.FC = () => {
       icon: ClockIcon,
       activeIndicator:
         isTimerRunning ||
+        isStopwatchRunning ||
         annivCalc.isAnnivToday ||
         annivCalc.isMensiveToday ||
         annivCalc.isMensiveApproaching,
@@ -526,6 +580,8 @@ export const DynamicIsland: React.FC = () => {
                 activeTasksCount={activeTasksCount}
                 timerActive={isTimerRunning}
                 timerRemaining={timerRemaining}
+                stopwatchActive={isStopwatchRunning}
+                stopwatchTime={compactStopwatchFormatted}
                 isStretchAlert={isStretchAlert}
                 isWaterAlert={isWaterAlert}
                 isAnnivToday={annivCalc.isAnnivToday}
@@ -612,6 +668,12 @@ export const DynamicIsland: React.FC = () => {
                       onResetTimer={handleResetTimer}
                       onSetPreset={handleSetTimerPreset}
                       formattedTimerTime={timerRemaining}
+                      stopwatchMs={stopwatchMs}
+                      isStopwatchRunning={isStopwatchRunning}
+                      stopwatchLaps={stopwatchLaps}
+                      onToggleStopwatch={handleToggleStopwatch}
+                      onResetStopwatch={handleResetStopwatch}
+                      onLapStopwatch={handleLapStopwatch}
                       startYear={startYear}
                       onStartYearChange={handleStartYearChange}
                       showAlwaysInCompact={showAlwaysAnniv}

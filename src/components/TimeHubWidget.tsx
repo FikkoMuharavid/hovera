@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Clock, Timer as TimerIcon, Heart } from 'lucide-react';
+import { Clock, Timer as TimerIcon, Heart, Hourglass } from 'lucide-react';
 import { ClockWidget } from './ClockWidget';
 import { TimerWidget } from './TimerWidget';
+import { StopwatchWidget, type LapRecord } from './StopwatchWidget';
 import { AnniversaryWidget } from './AnniversaryWidget';
 import { getAnniversaryCalculations } from '../utils/anniversary';
 import { sound } from '../utils/sound';
 
-export type TimeSubTab = 'clock' | 'timer' | 'anniv';
+export type TimeSubTab = 'clock' | 'timer' | 'stopwatch' | 'anniv';
 
 interface TimeHubWidgetProps {
   initialSubTab?: TimeSubTab;
@@ -19,6 +20,14 @@ interface TimeHubWidgetProps {
   onResetTimer: () => void;
   onSetPreset: (minutes: number) => void;
   formattedTimerTime: string;
+
+  // Stopwatch props
+  stopwatchMs: number;
+  isStopwatchRunning: boolean;
+  stopwatchLaps: LapRecord[];
+  onToggleStopwatch: () => void;
+  onResetStopwatch: () => void;
+  onLapStopwatch: () => void;
 
   // Anniversary props
   startYear: number;
@@ -36,6 +45,12 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
   onResetTimer,
   onSetPreset,
   formattedTimerTime,
+  stopwatchMs,
+  isStopwatchRunning,
+  stopwatchLaps,
+  onToggleStopwatch,
+  onResetStopwatch,
+  onLapStopwatch,
   startYear,
   onStartYearChange,
   showAlwaysInCompact,
@@ -57,25 +72,25 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
         <div className="inline-flex items-center p-0.5 rounded-full bg-zinc-900 border border-zinc-800/90 shadow-sm">
           <button
             onClick={() => handleSubTabChange('clock')}
-            className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
               subTab === 'clock'
                 ? 'bg-zinc-800 text-white shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Jam & Tgl</span>
+            <Clock className="w-3 h-3" />
+            <span>Jam</span>
           </button>
 
           <button
             onClick={() => handleSubTabChange('timer')}
-            className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
               subTab === 'timer'
                 ? 'bg-zinc-800 text-amber-300 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <TimerIcon className="w-3.5 h-3.5 text-amber-400" />
+            <TimerIcon className="w-3 h-3 text-amber-400" />
             <span>Timer</span>
             {isTimerRunning && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -83,15 +98,30 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
           </button>
 
           <button
+            onClick={() => handleSubTabChange('stopwatch')}
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
+              subTab === 'stopwatch'
+                ? 'bg-zinc-800 text-emerald-300 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Hourglass className="w-3 h-3 text-emerald-400" />
+            <span>Stopwatch</span>
+            {isStopwatchRunning && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            )}
+          </button>
+
+          <button
             onClick={() => handleSubTabChange('anniv')}
-            className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-medium transition-all ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-medium transition-all ${
               subTab === 'anniv'
                 ? 'bg-zinc-800 text-pink-300 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Heart className="w-3.5 h-3.5 fill-current text-pink-400" />
-            <span>Anniv & Mensive</span>
+            <Heart className="w-3 h-3 fill-current text-pink-400" />
+            <span>Anniv</span>
             {(annivCalc.isAnnivToday ||
               annivCalc.isMensiveToday ||
               annivCalc.isMensiveApproaching) && (
@@ -122,6 +152,18 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
               onReset={onResetTimer}
               onSetPreset={onSetPreset}
               formattedTime={formattedTimerTime}
+            />
+          )}
+
+          {subTab === 'stopwatch' && (
+            <StopwatchWidget
+              key="stopwatch"
+              timeMs={stopwatchMs}
+              isRunning={isStopwatchRunning}
+              laps={stopwatchLaps}
+              onToggleRun={onToggleStopwatch}
+              onReset={onResetStopwatch}
+              onLap={onLapStopwatch}
             />
           )}
 
