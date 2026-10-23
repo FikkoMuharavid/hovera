@@ -1,6 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, CheckCircle2, Timer as TimerIcon, HeartPulse, Droplets } from 'lucide-react';
+import {
+  Calendar,
+  CheckCircle2,
+  Timer as TimerIcon,
+  HeartPulse,
+  Droplets,
+  Heart,
+  Sparkles,
+} from 'lucide-react';
 
 interface CompactViewProps {
   currentTime: string;
@@ -10,6 +18,11 @@ interface CompactViewProps {
   timerRemaining: string;
   isStretchAlert?: boolean;
   isWaterAlert?: boolean;
+  isAnnivToday?: boolean;
+  isMensiveToday?: boolean;
+  isMensiveApproaching?: boolean;
+  daysUntilMensive?: number;
+  showAnnivBadge?: boolean;
   onClick: () => void;
 }
 
@@ -21,9 +34,21 @@ export const CompactView: React.FC<CompactViewProps> = ({
   timerRemaining,
   isStretchAlert = false,
   isWaterAlert = false,
+  isAnnivToday = false,
+  isMensiveToday = false,
+  isMensiveApproaching = false,
+  daysUntilMensive,
+  showAnnivBadge = false,
   onClick,
 }) => {
-  const hasReminders = isWaterAlert || isStretchAlert || timerActive || activeTasksCount > 0;
+  const hasReminders =
+    isWaterAlert ||
+    isStretchAlert ||
+    timerActive ||
+    activeTasksCount > 0 ||
+    isAnnivToday ||
+    isMensiveToday ||
+    showAnnivBadge;
 
   return (
     <motion.div
@@ -53,6 +78,34 @@ export const CompactView: React.FC<CompactViewProps> = ({
       {/* Sisi Kanan: Notifikasi Pengingat */}
       {hasReminders && (
         <div className="flex items-center space-x-1.5 justify-end shrink-0">
+          {/* Pengingat Anniversary Tahunan (14 Feb) */}
+          {isAnnivToday && (
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-pink-500/30 to-purple-500/30 border border-pink-400/50 text-[9px] text-pink-200 font-medium animate-pulse shadow-sm">
+              <Sparkles className="w-2.5 h-2.5 text-pink-300 shrink-0" />
+              <span>Anniv! 💍</span>
+            </div>
+          )}
+
+          {/* Pengingat Mensive Bulanan (Hari H Tgl 14) */}
+          {!isAnnivToday && isMensiveToday && (
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-500/25 border border-rose-400/50 text-[9px] text-rose-200 font-medium animate-pulse shadow-sm">
+              <Heart className="w-2.5 h-2.5 fill-current text-rose-400 shrink-0" />
+              <span>Mensive! 💖</span>
+            </div>
+          )}
+
+          {/* Pengingat Mensive Menjelang (H-3/H-2/H-1) atau Tampil Selalu */}
+          {!isAnnivToday && !isMensiveToday && showAnnivBadge && (
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-400/30 text-[9px] text-rose-300 font-medium">
+              <Heart className="w-2.5 h-2.5 fill-current text-rose-400 shrink-0" />
+              <span>
+                {isMensiveApproaching && daysUntilMensive !== undefined
+                  ? `H-${daysUntilMensive} Mensive`
+                  : '14 Feb'}
+              </span>
+            </div>
+          )}
+
           {/* Pengingat Minum Air Putih */}
           {isWaterAlert && (
             <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/40 text-[9px] text-sky-300 font-medium animate-pulse shadow-sm">

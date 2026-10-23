@@ -6,19 +6,22 @@ import {
   LayoutGrid,
   Timer as TimerIcon,
   HeartPulse,
+  Heart,
   Settings as SettingsIcon,
   ChevronUp,
 } from 'lucide-react';
 import { CompactView } from './CompactView';
 import { ClockWidget } from './ClockWidget';
+import { AnniversaryWidget } from './AnniversaryWidget';
 import { TodoWidget } from './TodoWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
 import { TimerWidget } from './TimerWidget';
 import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
+import { getAnniversaryCalculations } from '../utils/anniversary';
 
-type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'timer' | 'health' | 'settings';
+type ActiveTab = 'clock' | 'anniv' | 'todo' | 'shortcuts' | 'timer' | 'health' | 'settings';
 
 export const DynamicIsland: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -65,6 +68,26 @@ export const DynamicIsland: React.FC = () => {
   const [autoWaterAlert, setAutoWaterAlert] = useState(() => {
     return localStorage.getItem('di_water_auto_alert') !== 'false';
   });
+
+  // ================= ANNIVERSARY & MENSIVE =================
+  const [startYear, setStartYear] = useState(() => {
+    const val = localStorage.getItem('di_anniv_year');
+    return val ? Number(val) : 2024;
+  });
+  const [showAlwaysAnniv, setShowAlwaysAnniv] = useState(() => {
+    return localStorage.getItem('di_anniv_show_always') === 'true';
+  });
+
+  const handleStartYearChange = (year: number) => {
+    setStartYear(year);
+    localStorage.setItem('di_anniv_year', String(year));
+  };
+
+  const handleToggleShowAlwaysAnniv = () => {
+    const nextVal = !showAlwaysAnniv;
+    setShowAlwaysAnniv(nextVal);
+    localStorage.setItem('di_anniv_show_always', String(nextVal));
+  };
 
   // Preferences
   const [expandOnHover, setExpandOnHover] = useState(() => {
@@ -251,16 +274,25 @@ export const DynamicIsland: React.FC = () => {
   const isStretchAlert = stretchSecondsLeft === 0;
   const isWaterAlert = waterSecondsLeft === 0;
 
+  const annivCalc = getAnniversaryCalculations(startYear, 1, 14);
+  const showAnnivBadge =
+    annivCalc.isAnnivToday ||
+    annivCalc.isMensiveToday ||
+    (showAlwaysAnniv ? true : annivCalc.isMensiveApproaching);
+
   const hasAlert = isStretchAlert || isWaterAlert;
   const notificationCount =
     (isWaterAlert ? 1 : 0) +
     (isStretchAlert ? 1 : 0) +
     (timerActive ? 1 : 0) +
-    (activeTasksCount > 0 ? 1 : 0);
+    (activeTasksCount > 0 ? 1 : 0) +
+    (showAnnivBadge ? 1 : 0);
 
   const compactWidth = (() => {
-    if (notificationCount >= 2) return 275;
-    if (hasAlert) return 235;
+    if (notificationCount >= 3) return 310;
+    if (notificationCount === 2) return 275;
+    if (hasAlert) return 240;
+    if (showAnnivBadge) return 235;
     if (timerActive) return 230;
     if (activeTasksCount > 0) return 215;
     return 180;
@@ -268,6 +300,13 @@ export const DynamicIsland: React.FC = () => {
 
   const tabs = [
     { id: 'clock', label: 'Waktu', icon: ClockIcon },
+    {
+      id: 'anniv',
+      label: 'Anniv',
+      icon: Heart,
+      activeIndicator:
+        annivCalc.isAnnivToday || annivCalc.isMensiveToday || annivCalc.isMensiveApproaching,
+    },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
     { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
     { id: 'timer', label: 'Timer', icon: TimerIcon, activeIndicator: timerActive },
@@ -319,6 +358,11 @@ export const DynamicIsland: React.FC = () => {
                 timerRemaining={timerRemaining}
                 isStretchAlert={isStretchAlert}
                 isWaterAlert={isWaterAlert}
+                isAnnivToday={annivCalc.isAnnivToday}
+                isMensiveToday={annivCalc.isMensiveToday}
+                isMensiveApproaching={annivCalc.isMensiveApproaching}
+                daysUntilMensive={annivCalc.daysUntilMensive}
+                showAnnivBadge={showAnnivBadge}
                 onClick={toggleExpand}
               />
             </motion.div>
@@ -345,7 +389,7 @@ export const DynamicIsland: React.FC = () => {
                       <button
                         key={tab.id}
                         onClick={() => handleTabSelect(tab.id as ActiveTab)}
-                        className={`relative inline-flex items-center justify-center px-2.5 py-1 rounded-full transition-colors select-none ${
+                        className={`relative inline-flex items-center justify-center px-2 py-1 rounded-full transition-colors select-none ${
                           isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
@@ -356,9 +400,9 @@ export const DynamicIsland: React.FC = () => {
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none">
+                        <span className="relative z-10 inline-flex items-center justify-center gap-1 leading-none">
                           <Icon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="font-medium text-[11px] leading-none pt-0.5">
+                          <span className="font-medium text-[10.5px] leading-none pt-0.5">
                             {tab.label}
                           </span>
                           {tab.badge !== undefined && tab.badge > 0 && (
@@ -367,7 +411,7 @@ export const DynamicIsland: React.FC = () => {
                             </span>
                           )}
                           {tab.activeIndicator && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse" />
                           )}
                         </span>
                       </button>
@@ -388,7 +432,22 @@ export const DynamicIsland: React.FC = () => {
               {/* Main Content Area */}
               <div className="flex-1 overflow-hidden pt-2">
                 <AnimatePresence mode="wait">
-                  {activeTab === 'clock' && <ClockWidget key="clock" />}
+                  {activeTab === 'clock' && (
+                    <ClockWidget
+                      key="clock"
+                      onNavigateToAnniv={() => handleTabSelect('anniv')}
+                      startYear={startYear}
+                    />
+                  )}
+                  {activeTab === 'anniv' && (
+                    <AnniversaryWidget
+                      key="anniv"
+                      startYear={startYear}
+                      onStartYearChange={handleStartYearChange}
+                      showAlwaysInCompact={showAlwaysAnniv}
+                      onToggleShowAlways={handleToggleShowAlwaysAnniv}
+                    />
+                  )}
                   {activeTab === 'todo' && (
                     <TodoWidget key="todo" onTasksUpdate={setActiveTasksCount} />
                   )}
