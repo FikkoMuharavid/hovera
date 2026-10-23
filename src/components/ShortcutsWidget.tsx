@@ -11,10 +11,8 @@ import {
   Plus,
   Trash2,
   ExternalLink,
-  Code2,
   Compass,
   Search,
-  Sparkles,
   ArrowLeft,
   FolderOpen,
   Briefcase,
@@ -25,6 +23,19 @@ import {
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import type { ProjectInfo } from '../types/electron';
+
+export const VscodeIcon: React.FC<{ className?: string }> = ({
+  className = 'w-4 h-4 text-white',
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 0 8.012v7.976a1 1 0 0 0 .327.751l1.322 1.202a1 1 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.94-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zM18 17.683L9.54 12 18 6.317v11.366z" />
+  </svg>
+);
 
 export interface ShortcutItem {
   id: string;
@@ -42,8 +53,8 @@ const DEFAULT_SHORTCUTS: ShortcutItem[] = [
     name: 'Antigravity',
     target: 'antigravity-picker',
     type: 'app',
-    iconType: 'antigravity',
-    color: 'from-indigo-500 via-purple-500 to-pink-500',
+    iconType: 'vscode',
+    color: 'from-sky-500 via-blue-600 to-indigo-600',
   },
   {
     id: 'explorer',
@@ -108,16 +119,32 @@ export const ShortcutsWidget: React.FC = () => {
     try {
       const saved = localStorage.getItem('di_shortcuts');
       if (saved) {
-        const parsed: ShortcutItem[] = JSON.parse(saved);
-        // Pastikan Antigravity ada di urutan terdepan jika belum ada di data lama
-        if (!parsed.some((s) => s.id === 'antigravity')) {
-          const antigravityItem = DEFAULT_SHORTCUTS.find((s) => s.id === 'antigravity');
-          if (antigravityItem) {
-            const merged = [antigravityItem, ...parsed];
-            localStorage.setItem('di_shortcuts', JSON.stringify(merged));
-            return merged;
-          }
+        let parsed: ShortcutItem[] = JSON.parse(saved);
+        // Hapus vscode jika ada di cache lama
+        parsed = parsed.filter((s) => s.id !== 'vscode');
+
+        // Pastikan Antigravity ada di urutan pertama dan menggunakan ikon VS Code serta warna biru
+        const antigravityItem: ShortcutItem = {
+          id: 'antigravity',
+          name: 'Antigravity',
+          target: 'antigravity-picker',
+          type: 'app',
+          iconType: 'vscode',
+          color: 'from-sky-500 via-blue-600 to-indigo-600',
+        };
+
+        const existingIdx = parsed.findIndex((s) => s.id === 'antigravity');
+        if (existingIdx !== -1) {
+          parsed[existingIdx] = {
+            ...parsed[existingIdx],
+            iconType: 'vscode',
+            color: 'from-sky-500 via-blue-600 to-indigo-600',
+          };
+        } else {
+          parsed.unshift(antigravityItem);
         }
+
+        localStorage.setItem('di_shortcuts', JSON.stringify(parsed));
         return parsed;
       }
     } catch {
@@ -293,8 +320,10 @@ export const ShortcutsWidget: React.FC = () => {
 
   const renderIcon = (iconType: string) => {
     switch (iconType) {
+      case 'vscode':
       case 'antigravity':
-        return <Sparkles className="w-4 h-4 text-white" />;
+      case 'code':
+        return <VscodeIcon className="w-4 h-4 text-white" />;
       case 'folder':
         return <Folder className="w-4 h-4 text-white" />;
       case 'calc':
@@ -309,8 +338,6 @@ export const ShortcutsWidget: React.FC = () => {
         return <Music className="w-4 h-4 text-white" />;
       case 'globe':
         return <Globe className="w-4 h-4 text-white" />;
-      case 'code':
-        return <Code2 className="w-4 h-4 text-white" />;
       default:
         return <Compass className="w-4 h-4 text-white" />;
     }
@@ -378,8 +405,8 @@ export const ShortcutsWidget: React.FC = () => {
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
                 <div className="flex items-center space-x-1.5">
-                  <div className="p-1 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-sm">
-                    <Sparkles className="w-3 h-3" />
+                  <div className="p-1 rounded-md bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-sm">
+                    <VscodeIcon className="w-3 h-3 text-white" />
                   </div>
                   <span className="text-xs font-semibold text-white">
                     Buka Project di Antigravity
@@ -519,7 +546,7 @@ export const ShortcutsWidget: React.FC = () => {
                               : 'bg-purple-600/80 border border-purple-400/30'
                           }`}
                         >
-                          <Code2 className="w-3.5 h-3.5" />
+                          <VscodeIcon className="w-3.5 h-3.5 text-white" />
                         </div>
                         <div className="overflow-hidden">
                           <div className="flex items-center space-x-1.5">
