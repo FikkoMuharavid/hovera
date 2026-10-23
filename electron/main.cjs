@@ -13,8 +13,8 @@ let mainWindow = null;
 let tray = null;
 let currentYOffset = 6; // default distance from top edge
 
-const WINDOW_WIDTH = 560;
-const WINDOW_HEIGHT = 440;
+const WINDOW_WIDTH = 580;
+const WINDOW_HEIGHT = 680;
 
 // Isolated application data path
 app.name = 'DynamicIslandWindows';

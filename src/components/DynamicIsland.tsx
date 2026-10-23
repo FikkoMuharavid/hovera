@@ -8,6 +8,7 @@ import {
   HeartPulse,
   Settings as SettingsIcon,
   ChevronUp,
+  Maximize2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CompactView } from './CompactView';
@@ -28,6 +29,66 @@ export const DynamicIsland: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('clock');
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
+
+  // User customizable expanded height (drag downward or toggle presets)
+  const [expandedHeight, setExpandedHeight] = useState(() => {
+    try {
+      const saved = localStorage.getItem('di_expanded_height');
+      if (saved) {
+        const val = Number(saved);
+        if (val >= 280 && val <= 620) return val;
+      }
+    } catch {
+      // fallback
+    }
+    return 430; // Generous comfortable default height!
+  });
+
+  const isResizingHeightRef = useRef(false);
+  const startResizeYRef = useRef(0);
+  const startHeightRef = useRef(430);
+
+  const handleResizePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    isResizingHeightRef.current = true;
+    startResizeYRef.current = e.clientY;
+    startHeightRef.current = expandedHeight;
+  };
+
+  const handleResizePointerMove = (e: React.PointerEvent) => {
+    if (!isResizingHeightRef.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const deltaY = e.clientY - startResizeYRef.current;
+    const newHeight = Math.min(620, Math.max(300, Math.round(startHeightRef.current + deltaY)));
+    setExpandedHeight(newHeight);
+  };
+
+  const handleResizePointerUp = (e: React.PointerEvent) => {
+    if (!isResizingHeightRef.current) return;
+    isResizingHeightRef.current = false;
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    localStorage.setItem('di_expanded_height', String(expandedHeight));
+  };
+
+  const handleCycleHeightPreset = () => {
+    sound.playClick();
+    setExpandedHeight((prev) => {
+      let next = 430;
+      if (prev < 380) next = 460;
+      else if (prev < 500) next = 560;
+      else next = 330;
+      localStorage.setItem('di_expanded_height', String(next));
+      return next;
+    });
+  };
+
   const [activeTasksCount, setActiveTasksCount] = useState(() => {
     try {
       const saved = localStorage.getItem('di_tasks');
@@ -733,7 +794,7 @@ export const DynamicIsland: React.FC = () => {
         onPointerCancel={handlePointerUp}
         animate={{
           width: isExpanded ? 525 : compactWidth,
-          height: isExpanded ? 310 : 36,
+          height: isExpanded ? expandedHeight : 36,
           borderRadius: isExpanded ? 32 : 18,
         }}
         transition={{
@@ -840,14 +901,25 @@ export const DynamicIsland: React.FC = () => {
                   })}
                 </div>
 
-                {/* Collapse button */}
-                <button
-                  onClick={toggleExpand}
-                  className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
-                  title="Tutup Kapsul"
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
+                <div className="flex items-center space-x-1 shrink-0">
+                  {/* Cycle Height Preset Button */}
+                  <button
+                    onClick={handleCycleHeightPreset}
+                    className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                    title={`Ukuran Tinggi: ${expandedHeight}px (Klik untuk ubah: Sedang / Panjang / Ringkas)`}
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Collapse button */}
+                  <button
+                    onClick={toggleExpand}
+                    className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+                    title="Tutup Kapsul"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Main Content Area */}
@@ -934,6 +1006,21 @@ export const DynamicIsland: React.FC = () => {
                     />
                   )}
                 </AnimatePresence>
+              </div>
+
+              {/* Bottom Drag Resize Handle */}
+              <div
+                onPointerDown={handleResizePointerDown}
+                onPointerMove={handleResizePointerMove}
+                onPointerUp={handleResizePointerUp}
+                onPointerCancel={handleResizePointerUp}
+                className="w-full flex flex-col items-center justify-center pt-2 pb-0.5 cursor-ns-resize hover:bg-white/5 active:bg-white/10 transition-colors select-none group shrink-0"
+                title="Tarik ke bawah atau atas untuk mengatur panjang tinggi kapsul"
+              >
+                <div className="w-12 h-1 rounded-full bg-zinc-700 group-hover:bg-zinc-400 group-active:bg-sky-400 transition-colors shadow-sm" />
+                <span className="text-[8px] text-zinc-500 group-hover:text-zinc-300 font-medium select-none tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
+                  Tarik untuk Ubah Tinggi ({expandedHeight}px)
+                </span>
               </div>
             </motion.div>
           )}

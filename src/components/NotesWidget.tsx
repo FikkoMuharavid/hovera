@@ -15,6 +15,10 @@ import {
   Check,
   Globe,
   Sparkles,
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  Edit3,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 
@@ -64,9 +68,16 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
   isTranscribing = false,
 }) => {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+
+  const toggleCardExpand = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    sound.playClick();
+    setExpandedNoteId((prev) => (prev === id ? null : id));
+  };
 
   // Note editor local state
   const [editTitle, setEditTitle] = useState('');
@@ -441,7 +452,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           </div>
 
           {/* Notes Cards Scroll View */}
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 pr-0.5 max-h-[110px]">
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 pr-0.5 min-h-[140px]">
             {filteredNotes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-6 text-zinc-500 text-xs">
                 <FileText className="w-6 h-6 mb-1 opacity-30" />
@@ -451,69 +462,176 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
                 </span>
               </div>
             ) : (
-              filteredNotes.map((n) => (
-                <div
-                  key={n.id}
-                  onClick={() => handleOpenNote(n)}
-                  className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/70 hover:bg-zinc-800/80 border border-zinc-800/80 hover:border-zinc-700/80 cursor-pointer transition-all group shadow-sm"
-                >
-                  <div className="flex items-center space-x-2.5 overflow-hidden flex-1 mr-2">
-                    <div className="w-6 h-6 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
-                      <FileText className="w-3 h-3" />
-                    </div>
-                    <div className="overflow-hidden flex-1">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-xs font-semibold text-zinc-200 group-hover:text-white truncate">
-                          {n.title}
-                        </span>
-                        {n.durationSeconds ? (
-                          <span className="px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 text-[8.5px] font-mono shrink-0">
-                            {Math.floor(n.durationSeconds / 60)}m {n.durationSeconds % 60}s
-                          </span>
-                        ) : null}
-                      </div>
-                      <span className="text-[10px] text-zinc-500 truncate block">
-                        {n.content ? n.content.replace(/\n+/g, ' ') : 'Catatan kosong'}
-                      </span>
-                    </div>
-                  </div>
+              filteredNotes.map((n) => {
+                const isCardExpanded = expandedNoteId === n.id;
+                const wordCount = n.content.trim() ? n.content.trim().split(/\s+/).length : 0;
+                const charCount = n.content.length;
+                const dateFormatted = new Date(n.createdAt).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
 
-                  {/* Actions on Card */}
+                return (
                   <div
-                    className="flex items-center space-x-1 shrink-0"
-                    onClick={(e) => e.stopPropagation()}
+                    key={n.id}
+                    className={`rounded-xl border transition-all shadow-sm overflow-hidden ${
+                      isCardExpanded
+                        ? 'bg-zinc-900 border-zinc-700/80 shadow-md ring-1 ring-white/10'
+                        : 'bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800/80 hover:border-zinc-700/80'
+                    }`}
                   >
-                    <button
-                      onClick={() => handleCopyText(n.content, n.id)}
-                      className="p-1 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-                      title="Salin teks"
+                    {/* Card Header Row (Clickable) */}
+                    <div
+                      onClick={() => toggleCardExpand(n.id)}
+                      className="flex items-center justify-between p-2.5 cursor-pointer select-none"
                     >
-                      {copiedId === n.id ? (
-                        <Check className="w-3 h-3 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3 h-3" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => handleExportNote(n, 'txt')}
-                      className="p-1 rounded-md text-zinc-500 hover:text-sky-300 hover:bg-zinc-800 transition-colors"
-                      title="Export .txt"
-                    >
-                      <Download className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        sound.playPop();
-                        onDeleteNote(n.id);
-                      }}
-                      className="p-1 rounded-md text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
-                      title="Hapus"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                      <div className="flex items-center space-x-2.5 overflow-hidden flex-1 mr-2">
+                        <div className="w-6 h-6 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+                          <FileText className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="overflow-hidden flex-1">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-xs font-semibold text-zinc-100 truncate">
+                              {n.title}
+                            </span>
+                            {n.durationSeconds ? (
+                              <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-mono shrink-0">
+                                {Math.floor(n.durationSeconds / 60)}m {n.durationSeconds % 60}s
+                              </span>
+                            ) : null}
+                          </div>
+                          {!isCardExpanded && (
+                            <span className="text-[10px] text-zinc-400 truncate block mt-0.5">
+                              {n.content ? n.content.replace(/\n+/g, ' ') : 'Catatan kosong'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right side buttons */}
+                      <div
+                        className="flex items-center space-x-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Detail Toggle Button */}
+                        <button
+                          onClick={(e) => toggleCardExpand(n.id, e)}
+                          className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white text-[10px] transition-colors"
+                          title={isCardExpanded ? 'Tutup Detail' : 'Lihat Detail Lengkap'}
+                        >
+                          <Eye className="w-3 h-3 text-sky-400" />
+                          <span className="font-medium">{isCardExpanded ? 'Tutup' : 'Detail'}</span>
+                          {isCardExpanded ? (
+                            <ChevronUp className="w-2.5 h-2.5 text-zinc-400" />
+                          ) : (
+                            <ChevronDown className="w-2.5 h-2.5 text-zinc-400" />
+                          )}
+                        </button>
+
+                        {/* Copy button */}
+                        <button
+                          onClick={() => handleCopyText(n.content, n.id)}
+                          className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                          title="Salin teks"
+                        >
+                          {copiedId === n.id ? (
+                            <Check className="w-3 h-3 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </button>
+
+                        {/* Export button */}
+                        <button
+                          onClick={() => handleExportNote(n, 'txt')}
+                          className="p-1 rounded-md text-zinc-400 hover:text-sky-300 hover:bg-zinc-800 transition-colors"
+                          title="Export .txt"
+                        >
+                          <Download className="w-3 h-3" />
+                        </button>
+
+                        {/* Delete button */}
+                        <button
+                          onClick={() => {
+                            sound.playPop();
+                            onDeleteNote(n.id);
+                          }}
+                          className="p-1 rounded-md text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded In-Place Detail View */}
+                    {isCardExpanded && (
+                      <div className="px-3 pb-3 pt-1 border-t border-zinc-800/80 bg-black/40 flex flex-col gap-2">
+                        {/* Detailed Metadata Badges */}
+                        <div className="flex flex-wrap items-center gap-2 text-[9.5px] text-zinc-400 pt-0.5">
+                          <span className="flex items-center space-x-1">
+                            <Calendar className="w-2.5 h-2.5 text-zinc-500" />
+                            <span>{dateFormatted}</span>
+                          </span>
+                          <span>·</span>
+                          <span>{wordCount} kata</span>
+                          <span>·</span>
+                          <span>{charCount} karakter</span>
+                          {n.language && (
+                            <>
+                              <span>·</span>
+                              <span className="text-zinc-500">
+                                {n.language === 'en-US' ? 'English' : 'Bahasa Indonesia'}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Full Content Textarea / Card (Scrollable & Selectable) */}
+                        <div className="p-2.5 rounded-lg bg-zinc-950/90 border border-zinc-800/80 text-[11px] text-zinc-200 font-sans leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto no-scrollbar select-text selection:bg-sky-500/30">
+                          {n.content || (
+                            <span className="text-zinc-600 italic">Belum ada teks pada catatan ini.</span>
+                          )}
+                        </div>
+
+                        {/* Actions Bar */}
+                        <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60">
+                          <button
+                            onClick={() => handleOpenNote(n)}
+                            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-semibold text-[10px] transition-colors shadow-sm"
+                            title="Buka di editor penuh untuk mengedit judul dan teks"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Buka Editor Lengkap</span>
+                          </button>
+
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              onClick={() => handleExportNote(n, 'txt')}
+                              className="flex items-center space-x-1 px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                              title="Export ke .TXT"
+                            >
+                              <Download className="w-2.5 h-2.5 text-sky-400" />
+                              <span>.txt</span>
+                            </button>
+                            <button
+                              onClick={() => handleExportNote(n, 'md')}
+                              className="flex items-center space-x-1 px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition-colors"
+                              title="Export ke .MD (Markdown)"
+                            >
+                              <Download className="w-2.5 h-2.5 text-purple-400" />
+                              <span>.md</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
