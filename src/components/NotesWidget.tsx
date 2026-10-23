@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   Check,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 
@@ -43,6 +44,7 @@ interface NotesWidgetProps {
   onStopRecording: () => void;
   onClearLiveTranscript: () => void;
   speechError: string | null;
+  isTranscribing?: boolean;
 }
 
 export const NotesWidget: React.FC<NotesWidgetProps> = ({
@@ -59,6 +61,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
   onStopRecording,
   onClearLiveTranscript,
   speechError,
+  isTranscribing = false,
 }) => {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -405,6 +408,13 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
                     <span>Mendengarkan ucapan... Bicara sekarang untuk melihat teks langsung</span>
                   </span>
                 )}
+              </div>
+            )}
+
+            {isTranscribing && (
+              <div className="flex items-center space-x-2 py-1 px-2.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[10px] animate-pulse">
+                <Sparkles className="w-3 h-3 text-sky-400 shrink-0 animate-spin" />
+                <span>Memproses transkrip suara dengan Whisper AI... Harap tunggu sebentar</span>
               </div>
             )}
 

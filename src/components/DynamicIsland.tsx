@@ -19,6 +19,7 @@ import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
 import { getAnniversaryCalculations } from '../utils/anniversary';
+import { MeetingAudioRecorder } from '../utils/audioRecorder';
 
 type ActiveTab = 'clock' | 'todo' | 'notes' | 'shortcuts' | 'health' | 'settings';
 
@@ -170,15 +171,15 @@ export const DynamicIsland: React.FC = () => {
   });
 
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [speechLanguage, setSpeechLanguage] = useState<'id-ID' | 'en-US'>('id-ID');
   const [speechError, setSpeechError] = useState<string | null>(null);
 
-  const recognitionRef = useRef<any>(null);
-  const isRecordingRef = useRef<boolean>(false);
-  const accumulatedTranscriptRef = useRef<string>('');
+  const audioRecorderRef = useRef<MeetingAudioRecorder | null>(null);
   const recordingIntervalRef = useRef<any>(null);
+  const liveTranscribeIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     if (isRecording) {
@@ -196,90 +197,84 @@ export const DynamicIsland: React.FC = () => {
   const handleStartRecording = async () => {
     sound.playClick();
     setSpeechError(null);
-    const SpeechRecognitionAPI =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognitionAPI) {
-      setSpeechError('Web Speech API tidak didukung pada sistem ini.');
-      return;
-    }
+    setLiveTranscript('');
 
     try {
-      if (navigator.mediaDevices?.getUserMedia) {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-      }
-    } catch {
-      setSpeechError('Akses mikrofon ditolak atau mikrofon tidak terdeteksi.');
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognitionAPI();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = speechLanguage;
-
-      recognition.onresult = (event: any) => {
-        let interim = '';
-        let final = accumulatedTranscriptRef.current;
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const chunk = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            final += (final ? ' ' : '') + chunk;
-          } else {
-            interim += chunk;
-          }
-        }
-        accumulatedTranscriptRef.current = final;
-        const currentTotal = final + (interim ? (final ? ' ' : '') + interim : '');
-        setLiveTranscript(currentTotal);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('SpeechRecognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          setSpeechError('Izin mikrofon ditolak.');
-          handleStopRecording();
-        } else if (event.error === 'network') {
-          setSpeechError('Koneksi internet diperlukan untuk Google Speech-to-Text.');
-        } else if (event.error !== 'no-speech') {
-          setSpeechError(`Error pengenalan suara: ${event.error}`);
-        }
-      };
-
-      recognition.onend = () => {
-        if (isRecordingRef.current) {
-          try {
-            recognition.start();
-          } catch {
-            // Already active
-          }
-        }
-      };
-
-      accumulatedTranscriptRef.current = liveTranscript;
-      recognitionRef.current = recognition;
-      isRecordingRef.current = true;
-      recognition.start();
+      const recorder = new MeetingAudioRecorder();
+      await recorder.start();
+      audioRecorderRef.current = recorder;
       setIsRecording(true);
-    } catch (e: any) {
-      setSpeechError(`Gagal memulai mikrofon: ${e.message || e}`);
+      setRecordingSeconds(0);
+
+      // Periodically poll Whisper AI for live speech-to-text preview
+      if (liveTranscribeIntervalRef.current) clearInterval(liveTranscribeIntervalRef.current);
+      liveTranscribeIntervalRef.current = setInterval(async () => {
+        if (!audioRecorderRef.current || !window.electronAPI?.transcribeAudio) return;
+        try {
+          const samples = await audioRecorderRef.current.get16kSamples();
+          if (samples && samples.length >= 16000 * 2) {
+            const res = await window.electronAPI.transcribeAudio({
+              audioSamples: samples,
+              language: speechLanguage,
+            });
+            if (res.success && res.text) {
+              setLiveTranscript(res.text);
+            }
+          }
+        } catch {
+          // ignore background sampling errors
+        }
+      }, 6000);
+    } catch (err: any) {
+      console.error('Failed to start audio recording:', err);
+      setSpeechError(
+        'Tidak dapat mengakses mikrofon. Pastikan izin mikrofon telah diberikan di Windows.'
+      );
+      setIsRecording(false);
     }
   };
 
-  const handleStopRecording = () => {
+  const handleStopRecording = async () => {
     sound.playPop();
-    isRecordingRef.current = false;
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      recognitionRef.current = null;
+    if (liveTranscribeIntervalRef.current) {
+      clearInterval(liveTranscribeIntervalRef.current);
+      liveTranscribeIntervalRef.current = null;
     }
-    setIsRecording(false);
 
-    const transcriptText = (liveTranscript || accumulatedTranscriptRef.current).trim();
-    if (transcriptText) {
+    const recorder = audioRecorderRef.current;
+    if (recorder) {
+      recorder.stop();
+    }
+
+    setIsRecording(false);
+    setIsTranscribing(true);
+
+    let finalTranscript = liveTranscript.trim();
+
+    if (recorder && window.electronAPI?.transcribeAudio) {
+      try {
+        const samples = await recorder.get16kSamples();
+        if (samples && samples.length > 4000) {
+          const res = await window.electronAPI.transcribeAudio({
+            audioSamples: samples,
+            language: speechLanguage,
+          });
+          if (res.success && res.text) {
+            finalTranscript = res.text.trim();
+            setLiveTranscript(finalTranscript);
+          } else if (res.error) {
+            console.warn('Transcription error:', res.error);
+          }
+        }
+      } catch (err: any) {
+        console.error('Final transcription failed:', err);
+      }
+    }
+
+    setIsTranscribing(false);
+    audioRecorderRef.current = null;
+
+    if (finalTranscript) {
       const newNote: MeetingNote = {
         id: Date.now().toString(),
         title: `Transkrip Rapat ${new Date().toLocaleDateString('id-ID', {
@@ -288,7 +283,7 @@ export const DynamicIsland: React.FC = () => {
           hour: '2-digit',
           minute: '2-digit',
         })}`,
-        content: transcriptText,
+        content: finalTranscript,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         durationSeconds: recordingSeconds,
@@ -298,12 +293,13 @@ export const DynamicIsland: React.FC = () => {
       setNotes(updated);
       localStorage.setItem('di_meeting_notes', JSON.stringify(updated));
       sound.playSuccess();
+    } else {
+      setSpeechError('Tidak ada ucapan terdeteksi atau rekaman terlalu singkat.');
     }
   };
 
   const handleClearLiveTranscript = () => {
     sound.playPop();
-    accumulatedTranscriptRef.current = '';
     setLiveTranscript('');
     setRecordingSeconds(0);
   };
@@ -898,6 +894,7 @@ export const DynamicIsland: React.FC = () => {
                       onStopRecording={handleStopRecording}
                       onClearLiveTranscript={handleClearLiveTranscript}
                       speechError={speechError}
+                      isTranscribing={isTranscribing}
                     />
                   )}
                   {activeTab === 'shortcuts' && <ShortcutsWidget key="shortcuts" />}

@@ -45,5 +45,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveNoteFile: (params) => {
     return ipcRenderer.invoke('save-note-file', params);
   },
+  transcribeAudio: (params) => {
+    return ipcRenderer.invoke('transcribe-audio', params);
+  },
   isElectron: true,
 });

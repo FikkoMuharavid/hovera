@@ -411,6 +411,35 @@ ipcMain.handle('save-note-file', async (event, { title, content, format }) => {
   }
 });
 
+// Whisper Speech-to-Text Transcriber (Local, 100% Free, No API Keys)
+let whisperPipelinePromise = null;
+async function getWhisperTranscriber() {
+  if (!whisperPipelinePromise) {
+    const { pipeline, env } = await import('@xenova/transformers');
+    env.allowLocalModels = true;
+    whisperPipelinePromise = pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
+  }
+  return whisperPipelinePromise;
+}
+
+ipcMain.handle('transcribe-audio', async (event, { audioSamples, language }) => {
+  try {
+    const transcriber = await getWhisperTranscriber();
+    const float32 = audioSamples instanceof Float32Array ? audioSamples : Float32Array.from(audioSamples);
+    const lang = language === 'en-US' || language === 'english' ? 'english' : 'indonesian';
+    const output = await transcriber(float32, {
+      language: lang,
+      task: 'transcribe',
+      chunk_length_s: 30,
+      stride_length_s: 5,
+    });
+    return { success: true, text: (output?.text || '').trim() };
+  } catch (err) {
+    console.error('Whisper transcription error:', err);
+    return { success: false, error: err.message || String(err) };
+  }
+});
+
 app.whenReady().then(() => {
   createMainWindow();
   createTray();

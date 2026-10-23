@@ -24,6 +24,10 @@ export interface ElectronAPI {
     content: string;
     format: 'txt' | 'md';
   }) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>;
+  transcribeAudio?: (params: {
+    audioSamples: Float32Array | number[];
+    language?: string;
+  }) => Promise<{ success: boolean; text?: string; error?: string }>;
 }
 
 declare global {
