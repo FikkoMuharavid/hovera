@@ -251,6 +251,21 @@ export const DynamicIsland: React.FC = () => {
   const isStretchAlert = stretchSecondsLeft === 0;
   const isWaterAlert = waterSecondsLeft === 0;
 
+  const hasAlert = isStretchAlert || isWaterAlert;
+  const notificationCount =
+    (isWaterAlert ? 1 : 0) +
+    (isStretchAlert ? 1 : 0) +
+    (timerActive ? 1 : 0) +
+    (activeTasksCount > 0 ? 1 : 0);
+
+  const compactWidth = (() => {
+    if (notificationCount >= 2) return 275;
+    if (hasAlert) return 235;
+    if (timerActive) return 230;
+    if (activeTasksCount > 0) return 215;
+    return 180;
+  })();
+
   const tabs = [
     { id: 'clock', label: 'Waktu', icon: ClockIcon },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
@@ -269,7 +284,7 @@ export const DynamicIsland: React.FC = () => {
       <motion.div
         ref={islandRef}
         animate={{
-          width: isExpanded ? 510 : 220,
+          width: isExpanded ? 510 : compactWidth,
           height: isExpanded ? 295 : 36,
           borderRadius: isExpanded ? 32 : 18,
         }}
