@@ -4,24 +4,21 @@ import {
   Clock as ClockIcon,
   CheckSquare,
   LayoutGrid,
-  Timer as TimerIcon,
   HeartPulse,
-  Heart,
   Settings as SettingsIcon,
   ChevronUp,
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { CompactView } from './CompactView';
-import { ClockWidget } from './ClockWidget';
-import { AnniversaryWidget } from './AnniversaryWidget';
+import { TimeHubWidget } from './TimeHubWidget';
 import { TodoWidget } from './TodoWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
-import { TimerWidget } from './TimerWidget';
 import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
 import { sound } from '../utils/sound';
 import { getAnniversaryCalculations } from '../utils/anniversary';
 
-type ActiveTab = 'clock' | 'anniv' | 'todo' | 'shortcuts' | 'timer' | 'health' | 'settings';
+type ActiveTab = 'clock' | 'todo' | 'shortcuts' | 'health' | 'settings';
 
 export const DynamicIsland: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -29,8 +26,62 @@ export const DynamicIsland: React.FC = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [activeTasksCount, setActiveTasksCount] = useState(0);
-  const [timerActive, setTimerActive] = useState(false);
-  const [timerRemaining, setTimerRemaining] = useState('25:00');
+
+  // ================= FOCUS TIMER =================
+  const [timerTotalSeconds, setTimerTotalSeconds] = useState(25 * 60);
+  const [timerSecondsLeft, setTimerSecondsLeft] = useState(25 * 60);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isTimerRunning && timerSecondsLeft > 0) {
+      interval = setInterval(() => {
+        setTimerSecondsLeft((prev) => {
+          if (prev <= 1) {
+            setIsTimerRunning(false);
+            sound.playSuccess();
+            try {
+              confetti({ particleCount: 50, spread: 60, origin: { y: 0.2 } });
+            } catch {
+              // fallback
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTimerRunning, timerSecondsLeft]);
+
+  const timerMins = Math.floor(timerSecondsLeft / 60).toString().padStart(2, '0');
+  const timerSecs = (timerSecondsLeft % 60).toString().padStart(2, '0');
+  const timerRemaining = `${timerMins}:${timerSecs}`;
+
+  const handleToggleTimer = () => {
+    sound.playClick();
+    if (timerSecondsLeft === 0) {
+      setTimerSecondsLeft(timerTotalSeconds);
+      setIsTimerRunning(true);
+    } else {
+      setIsTimerRunning(!isTimerRunning);
+    }
+  };
+
+  const handleResetTimer = () => {
+    sound.playPop();
+    setIsTimerRunning(false);
+    setTimerSecondsLeft(timerTotalSeconds);
+  };
+
+  const handleSetTimerPreset = (minutes: number) => {
+    sound.playClick();
+    setIsTimerRunning(false);
+    setTimerTotalSeconds(minutes * 60);
+    setTimerSecondsLeft(minutes * 60);
+  };
 
   // ================= STRETCH TIMER =================
   const [stretchInterval, setStretchInterval] = useState(() => {
@@ -284,7 +335,7 @@ export const DynamicIsland: React.FC = () => {
   const notificationCount =
     (isWaterAlert ? 1 : 0) +
     (isStretchAlert ? 1 : 0) +
-    (timerActive ? 1 : 0) +
+    (isTimerRunning ? 1 : 0) +
     (activeTasksCount > 0 ? 1 : 0) +
     (showAnnivBadge ? 1 : 0);
 
@@ -293,24 +344,30 @@ export const DynamicIsland: React.FC = () => {
     if (notificationCount === 2) return 275;
     if (hasAlert) return 240;
     if (showAnnivBadge) return 235;
-    if (timerActive) return 230;
+    if (isTimerRunning) return 230;
     if (activeTasksCount > 0) return 215;
     return 180;
   })();
 
   const tabs = [
-    { id: 'clock', label: 'Waktu', icon: ClockIcon },
     {
-      id: 'anniv',
-      label: 'Anniv',
-      icon: Heart,
+      id: 'clock',
+      label: 'Waktu',
+      icon: ClockIcon,
       activeIndicator:
-        annivCalc.isAnnivToday || annivCalc.isMensiveToday || annivCalc.isMensiveApproaching,
+        isTimerRunning ||
+        annivCalc.isAnnivToday ||
+        annivCalc.isMensiveToday ||
+        annivCalc.isMensiveApproaching,
     },
     { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
     { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
-    { id: 'timer', label: 'Timer', icon: TimerIcon, activeIndicator: timerActive },
-    { id: 'health', label: 'Sehat', icon: HeartPulse, activeIndicator: isStretchAlert || isWaterAlert },
+    {
+      id: 'health',
+      label: 'Sehat',
+      icon: HeartPulse,
+      activeIndicator: isStretchAlert || isWaterAlert,
+    },
     { id: 'settings', label: 'Setelan', icon: SettingsIcon },
   ];
 
@@ -354,7 +411,7 @@ export const DynamicIsland: React.FC = () => {
                 currentTime={currentTime}
                 currentDate={currentDate}
                 activeTasksCount={activeTasksCount}
-                timerActive={timerActive}
+                timerActive={isTimerRunning}
                 timerRemaining={timerRemaining}
                 isStretchAlert={isStretchAlert}
                 isWaterAlert={isWaterAlert}
@@ -379,9 +436,9 @@ export const DynamicIsland: React.FC = () => {
               transition={{ duration: 0.12 }}
               className="absolute inset-0 p-4 flex flex-col justify-between"
             >
-              {/* Top Navigation Bar with Symmetrical Padding */}
+              {/* Top Navigation Bar with 5 Clean Tabs */}
               <div className="flex items-center justify-between pb-2.5 border-b border-zinc-800/60">
-                <div className="flex items-center space-x-0.5">
+                <div className="flex items-center space-x-1">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = activeTab === tab.id;
@@ -389,7 +446,7 @@ export const DynamicIsland: React.FC = () => {
                       <button
                         key={tab.id}
                         onClick={() => handleTabSelect(tab.id as ActiveTab)}
-                        className={`relative inline-flex items-center justify-center px-2 py-1 rounded-full transition-colors select-none ${
+                        className={`relative inline-flex items-center justify-center px-3 py-1 rounded-full transition-colors select-none ${
                           isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
@@ -400,9 +457,9 @@ export const DynamicIsland: React.FC = () => {
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <span className="relative z-10 inline-flex items-center justify-center gap-1 leading-none">
+                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none">
                           <Icon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="font-medium text-[10.5px] leading-none pt-0.5">
+                          <span className="font-medium text-[11px] leading-none pt-0.5">
                             {tab.label}
                           </span>
                           {tab.badge !== undefined && tab.badge > 0 && (
@@ -411,7 +468,7 @@ export const DynamicIsland: React.FC = () => {
                             </span>
                           )}
                           {tab.activeIndicator && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                           )}
                         </span>
                       </button>
@@ -433,15 +490,15 @@ export const DynamicIsland: React.FC = () => {
               <div className="flex-1 overflow-hidden pt-2">
                 <AnimatePresence mode="wait">
                   {activeTab === 'clock' && (
-                    <ClockWidget
-                      key="clock"
-                      onNavigateToAnniv={() => handleTabSelect('anniv')}
-                      startYear={startYear}
-                    />
-                  )}
-                  {activeTab === 'anniv' && (
-                    <AnniversaryWidget
-                      key="anniv"
+                    <TimeHubWidget
+                      key="time-hub"
+                      totalSeconds={timerTotalSeconds}
+                      secondsLeft={timerSecondsLeft}
+                      isTimerRunning={isTimerRunning}
+                      onToggleTimer={handleToggleTimer}
+                      onResetTimer={handleResetTimer}
+                      onSetPreset={handleSetTimerPreset}
+                      formattedTimerTime={timerRemaining}
                       startYear={startYear}
                       onStartYearChange={handleStartYearChange}
                       showAlwaysInCompact={showAlwaysAnniv}
@@ -452,15 +509,6 @@ export const DynamicIsland: React.FC = () => {
                     <TodoWidget key="todo" onTasksUpdate={setActiveTasksCount} />
                   )}
                   {activeTab === 'shortcuts' && <ShortcutsWidget key="shortcuts" />}
-                  {activeTab === 'timer' && (
-                    <TimerWidget
-                      key="timer"
-                      onTimerStateChange={(active, remaining) => {
-                        setTimerActive(active);
-                        setTimerRemaining(remaining);
-                      }}
-                    />
-                  )}
                   {activeTab === 'health' && (
                     <HealthWidget
                       key="health"

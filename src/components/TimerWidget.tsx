@@ -1,74 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, Timer as TimerIcon } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { sound } from '../utils/sound';
 
 interface TimerWidgetProps {
-  onTimerStateChange: (active: boolean, remainingFormatted: string) => void;
+  totalSeconds: number;
+  secondsLeft: number;
+  isRunning: boolean;
+  onToggleRun: () => void;
+  onReset: () => void;
+  onSetPreset: (minutes: number) => void;
+  formattedTime: string;
 }
 
-export const TimerWidget: React.FC<TimerWidgetProps> = ({ onTimerStateChange }) => {
-  const [totalSeconds, setTotalSeconds] = useState(25 * 60);
-  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
-  const [isRunning, setIsRunning] = useState(false);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (isRunning && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            sound.playSuccess();
-            try {
-              confetti({ particleCount: 50, spread: 60, origin: { y: 0.2 } });
-            } catch {
-              // fallback
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning, secondsLeft]);
-
-  // Format MM:SS
-  const mins = Math.floor(secondsLeft / 60).toString().padStart(2, '0');
-  const secs = (secondsLeft % 60).toString().padStart(2, '0');
-  const formattedTime = `${mins}:${secs}`;
-
-  useEffect(() => {
-    onTimerStateChange(isRunning, formattedTime);
-  }, [isRunning, formattedTime, onTimerStateChange]);
-
-  const toggleRun = () => {
-    sound.playClick();
-    if (secondsLeft === 0) {
-      setSecondsLeft(totalSeconds);
-      setIsRunning(true);
-    } else {
-      setIsRunning(!isRunning);
-    }
-  };
-
-  const resetTimer = () => {
-    sound.playPop();
-    setIsRunning(false);
-    setSecondsLeft(totalSeconds);
-  };
-
-  const setPreset = (minutes: number) => {
-    sound.playClick();
-    setIsRunning(false);
-    setTotalSeconds(minutes * 60);
-    setSecondsLeft(minutes * 60);
-  };
-
+export const TimerWidget: React.FC<TimerWidgetProps> = ({
+  totalSeconds,
+  secondsLeft,
+  isRunning,
+  onToggleRun,
+  onReset,
+  onSetPreset,
+  formattedTime,
+}) => {
   // Progress for SVG ring
   const progress = totalSeconds > 0 ? (totalSeconds - secondsLeft) / totalSeconds : 0;
   const strokeDashoffset = 283 * (1 - progress);
@@ -79,20 +31,20 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({ onTimerStateChange }) 
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col items-center justify-between h-full w-full select-none"
+      className="flex flex-col items-center justify-between h-full w-full select-none py-1"
     >
       {/* Presets header */}
-      <div className="flex items-center space-x-1.5 pb-2 border-b border-zinc-800/80 w-full justify-between">
+      <div className="flex items-center space-x-1.5 pb-1.5 border-b border-zinc-800/80 w-full justify-between">
         <div className="flex items-center space-x-1.5 text-xs text-zinc-300 font-medium">
           <TimerIcon className="w-3.5 h-3.5 text-amber-400" />
           <span>Fokus Timer</span>
         </div>
 
         <div className="flex items-center space-x-1 text-[10px]">
-          {[5, 15, 25].map((m) => (
+          {[5, 15, 25, 45].map((m) => (
             <button
               key={m}
-              onClick={() => setPreset(m)}
+              onClick={() => onSetPreset(m)}
               className={`px-2 py-0.5 rounded-md font-mono transition-all ${
                 totalSeconds === m * 60
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
@@ -144,7 +96,7 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({ onTimerStateChange }) 
       {/* Control buttons */}
       <div className="flex items-center space-x-3 mt-1">
         <button
-          onClick={resetTimer}
+          onClick={onReset}
           className="p-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
           title="Reset"
         >
@@ -152,7 +104,7 @@ export const TimerWidget: React.FC<TimerWidgetProps> = ({ onTimerStateChange }) 
         </button>
 
         <button
-          onClick={toggleRun}
+          onClick={onToggleRun}
           className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all ${
             isRunning
               ? 'bg-amber-500 hover:bg-amber-400 text-black'
