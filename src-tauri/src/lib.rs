@@ -2053,7 +2053,7 @@ async fn hovera_check_updates(app: tauri::AppHandle) -> Result<UpdateInfo, Strin
                 has_update: true,
                 version: Some(update.version),
                 notes: update.body,
-                pub_date: update.date.map(|d| d.to_string()),
+                pub_date: update.date.and_then(|d| d.format(&time::format_description::well_known::Rfc3339).ok()),
             })
         }
         Ok(None) => {

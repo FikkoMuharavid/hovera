@@ -97,34 +97,40 @@ if (-not $SkipBuild) {
 Write-Host "`n[3/5] Memeriksa berkas installer dan tanda tangan keamanan..." -ForegroundColor Yellow
 $NsisDir = Join-Path $RootDir "src-tauri\target\release\bundle\nsis"
 $InstallerExe = Join-Path $NsisDir "Hovera_${Version}_x64-setup.exe"
+$ExeSigFile = Join-Path $NsisDir "Hovera_${Version}_x64-setup.exe.sig"
 $UpdateZip = Join-Path $NsisDir "Hovera_${Version}_x64-setup.nsis.zip"
-$SigFile = Join-Path $NsisDir "Hovera_${Version}_x64-setup.nsis.zip.sig"
+$ZipSigFile = Join-Path $NsisDir "Hovera_${Version}_x64-setup.nsis.zip.sig"
 
 if (-not (Test-Path $InstallerExe)) {
     Write-Host "[ERROR] Berkas installer $InstallerExe tidak ditemukan di $NsisDir" -ForegroundColor Red
     exit 1
 }
 
-# Jika berkas zip belum ada, buat otomatis dari installer exe
-if (-not (Test-Path $UpdateZip)) {
-    Write-Host "[PROSES] Mengompresi $InstallerExe menjadi $UpdateZip..." -ForegroundColor Cyan
-    Compress-Archive -Path $InstallerExe -DestinationPath $UpdateZip -Force
-}
+# Tandatangani berkas installer exe langsung (rekomendasi standar Tauri v2)
+Write-Host "[PROSES] Menandatangani berkas installer exe dengan kunci privat Ed25519..." -ForegroundColor Cyan
+Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+npx @tauri-apps/cli signer sign $InstallerExe -f $KeyPath --app-version $Version
 
-# Jika berkas tanda tangan belum ada, tandatangani otomatis menggunakan kunci privat
-if (-not (Test-Path $SigFile)) {
-    Write-Host "[PROSES] Menandatangani berkas paket dengan kunci privat Ed25519..." -ForegroundColor Cyan
-    Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
-    Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
-    npx @tauri-apps/cli signer sign $UpdateZip -f $KeyPath --app-version $Version
-}
-
-if (-not (Test-Path $SigFile)) {
-    Write-Host "[ERROR] Berkas tanda tangan digital (.sig) tidak berhasil dibuat." -ForegroundColor Red
+if (-not (Test-Path $ExeSigFile)) {
+    Write-Host "[ERROR] Berkas tanda tangan digital exe (.sig) tidak berhasil dibuat." -ForegroundColor Red
     exit 1
 }
 
-$signature = (Get-Content $SigFile -Raw).Trim()
+$exeSignature = (Get-Content $ExeSigFile -Raw).Trim()
+
+# Buat arsip zip uncompressed (Store) murni tanpa kompresi deflated untuk kompatibilitas
+Write-Host "[PROSES] Membuat paket arsip murni uncompressed (Store)..." -ForegroundColor Cyan
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+if (Test-Path $UpdateZip) { Remove-Item $UpdateZip -Force }
+$archive = [System.IO.Compression.ZipFile]::Open($UpdateZip, [System.IO.Compression.ZipArchiveMode]::Create)
+$exeLeafName = Split-Path $InstallerExe -Leaf
+[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $InstallerExe, $exeLeafName, [System.IO.Compression.CompressionLevel]::NoCompression)
+$archive.Dispose()
+
+# Tandatangani juga paket zip fallback
+npx @tauri-apps/cli signer sign $UpdateZip -f $KeyPath --app-version $Version
 
 # 5. Persiapan Direktori Rilis & Berkas latest.json
 Write-Host "`n[4/5] Menyiapkan paket rilis dan metadata latest.json..." -ForegroundColor Yellow
@@ -134,8 +140,8 @@ if (-not (Test-Path $ReleaseFolder)) {
 }
 
 $IsoDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$ZipFileName = [System.IO.Path]::GetFileName($UpdateZip)
-$DownloadUrl = "https://github.com/FikkoMuharavid/hovera/releases/download/v$Version/$ZipFileName"
+$ExeFileName = [System.IO.Path]::GetFileName($InstallerExe)
+$DownloadUrl = "https://github.com/FikkoMuharavid/hovera/releases/download/v$Version/$ExeFileName"
 
 $latestJsonContent = @{
     version = $Version
@@ -143,7 +149,7 @@ $latestJsonContent = @{
     pub_date = $IsoDate
     platforms = @{
         "windows-x86_64" = @{
-            signature = $signature
+            signature = $exeSignature
             url = $DownloadUrl
         }
     }
@@ -153,14 +159,20 @@ $LatestJsonPath = Join-Path $ReleaseFolder "latest.json"
 [System.IO.File]::WriteAllText($LatestJsonPath, ($latestJsonContent | ConvertTo-Json -Depth 6), $Utf8NoBom)
 
 # Salin berkas ke folder releases
-Copy-Item -Path $UpdateZip -Destination (Join-Path $ReleaseFolder $ZipFileName) -Force
-if (Test-Path $InstallerExe) {
-    Copy-Item -Path $InstallerExe -Destination $ReleaseFolder -Force
+Copy-Item -Path $InstallerExe -Destination (Join-Path $ReleaseFolder $ExeFileName) -Force
+Copy-Item -Path $ExeSigFile -Destination (Join-Path $ReleaseFolder (Split-Path $ExeSigFile -Leaf)) -Force
+if (Test-Path $UpdateZip) {
+    Copy-Item -Path $UpdateZip -Destination (Join-Path $ReleaseFolder (Split-Path $UpdateZip -Leaf)) -Force
+}
+if (Test-Path $ZipSigFile) {
+    Copy-Item -Path $ZipSigFile -Destination (Join-Path $ReleaseFolder (Split-Path $ZipSigFile -Leaf)) -Force
 }
 
 Write-Host "[OK] Paket rilis siap di: $ReleaseFolder" -ForegroundColor Green
-Write-Host "     - latest.json" -ForegroundColor Cyan
-Write-Host "     - $ZipFileName" -ForegroundColor Cyan
+Write-Host "     - latest.json (Direct EXE URL & Signature)" -ForegroundColor Cyan
+Write-Host "     - $ExeFileName" -ForegroundColor Cyan
+Write-Host "     - $(Split-Path $ExeSigFile -Leaf)" -ForegroundColor Cyan
+Write-Host "     - $(Split-Path $UpdateZip -Leaf) (Uncompressed Store)" -ForegroundColor Cyan
 
 # 6. Informasi & Panduan Publikasi ke GitHub Releases
 Write-Host "`n========================================================" -ForegroundColor Green

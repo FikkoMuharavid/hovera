@@ -1764,7 +1764,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hovera"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "base64 0.22.1",
  "image",
@@ -1778,8 +1778,10 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-log",
  "tauri-plugin-updater",
+ "time",
  "windows",
  "winreg",
+ "zip",
 ]
 
 [[package]]
@@ -5951,6 +5953,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cec733c9820347a592f6375c3c0089b479ba0a0b1cbf3dd1958b02959b7c033"
 dependencies = [
  "crc32fast",
+ "flate2",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
  "libc",

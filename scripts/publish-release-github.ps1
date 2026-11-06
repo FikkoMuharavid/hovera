@@ -74,8 +74,10 @@ $uploadBase = "https://uploads.github.com/repos/$repo/releases/$releaseId/assets
 $releaseDir = Join-Path (Resolve-Path "$PSScriptRoot\..") "releases\v$Version"
 $files = @(
     "latest.json",
+    "Hovera_${Version}_x64-setup.exe",
+    "Hovera_${Version}_x64-setup.exe.sig",
     "Hovera_${Version}_x64-setup.nsis.zip",
-    "Hovera_${Version}_x64-setup.exe"
+    "Hovera_${Version}_x64-setup.nsis.zip.sig"
 )
 
 # Ambil daftar aset yang sudah ada jika ada rilis lama

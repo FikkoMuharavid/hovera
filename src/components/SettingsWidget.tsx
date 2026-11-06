@@ -37,6 +37,23 @@ interface SettingsWidgetProps {
   initialUpdateInfo?: UpdateInfo | null;
 }
 
+const formatReleaseDate = (dateStr?: string | null): string | null => {
+  if (!dateStr) return null;
+  const cleanStr = dateStr.includes(' ') && !dateStr.includes('T') ? dateStr.replace(' ', 'T') : dateStr;
+  const parsed = new Date(cleanStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  }
+  const dateMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}/);
+  if (dateMatch) {
+    const d = new Date(dateMatch[0]);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    }
+  }
+  return null;
+};
+
 export const SettingsWidget = React.memo<SettingsWidgetProps>(({
   expandOnHover,
   onToggleExpandOnHover,
@@ -545,9 +562,9 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
                     Pembaruan Tersedia: v{updateInfo.version}
                   </span>
                 </div>
-                {updateInfo.pubDate && (
+                {formatReleaseDate(updateInfo.pubDate) && (
                   <span className="text-[9.5px] text-zinc-400">
-                    {new Date(updateInfo.pubDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    {formatReleaseDate(updateInfo.pubDate)}
                   </span>
                 )}
               </div>
@@ -633,7 +650,7 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
         {/* App Info & Quit */}
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center space-x-2 text-[10px] text-zinc-500">
-            <span className="text-zinc-400 font-medium">Dynamic Island Windows v1.0</span>
+            <span className="text-zinc-400 font-medium">Hovera v{appVersion}</span>
           </div>
 
           <button

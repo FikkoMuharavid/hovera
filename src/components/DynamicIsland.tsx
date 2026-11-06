@@ -82,8 +82,9 @@ export const DynamicIsland: React.FC = () => {
     const el = tabsContainerRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    setCanScrollLeft(scrollLeft > 1);
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
+    const maxScroll = Math.max(0, scrollWidth - clientWidth);
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(maxScroll > 0 && (maxScroll - scrollLeft) > 6);
   }, []);
 
   useEffect(() => {
@@ -143,7 +144,15 @@ export const DynamicIsland: React.FC = () => {
       }
       updateScrollIndicators();
     }, 50);
-    return () => clearTimeout(timer);
+
+    const settleTimer = setTimeout(() => {
+      updateScrollIndicators();
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(settleTimer);
+    };
   }, [activeTab, isExpanded, updateScrollIndicators]);
 
 
@@ -1653,6 +1662,9 @@ export const DynamicIsland: React.FC = () => {
   const handleTabSelect = (tab: ActiveTab) => {
     sound.playClick();
     setActiveTab(tab);
+    setTimeout(() => {
+      updateScrollIndicators();
+    }, 350);
   };
 
   const isStretchAlert = stretchSecondsLeft === 0;
@@ -1963,7 +1975,7 @@ export const DynamicIsland: React.FC = () => {
 
                 <div
                   ref={tabsContainerRef}
-                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar px-0.5 py-0.5"
+                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar pl-1 pr-3 py-0.5"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   {tabs.map((tab) => {
