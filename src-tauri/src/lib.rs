@@ -168,11 +168,18 @@ pub mod media_bridge {
             };
 
             if let Ok(session) = session {
+                if let Ok(info) = session.GetPlaybackInfo() {
+                    if let Ok(status) = info.PlaybackStatus() {
+                        is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                    }
+                }
+
                 if let Ok(timeline) = session.GetTimelineProperties() {
+                    let mut base_pos: f64 = 0.0;
                     if let Ok(pos) = timeline.Position() {
                         let s = (pos.Duration as f64) / 10_000_000.0;
                         if s >= 0.0 && s.is_finite() {
-                            position_secs = s;
+                            base_pos = s;
                         }
                     }
                     if let Ok(end) = timeline.EndTime() {
@@ -181,6 +188,34 @@ pub mod media_bridge {
                             duration_secs = s;
                         }
                     }
+
+                    // Windows GSMTC position is reported as-of LastUpdatedTime!
+                    // If playing, interpolate the elapsed real time so timeline stays perfectly synced
+                    // across media players (Spotify, Brave, Chrome, etc.)
+                    if is_playing {
+                        if let Ok(last_updated) = timeline.LastUpdatedTime() {
+                            let win_epoch_offset = 116_444_736_000_000_000i64;
+                            let last_updated_100ns = last_updated.UniversalTime;
+                            if last_updated_100ns > win_epoch_offset {
+                                let unix_now_100ns = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| (d.as_nanos() / 100) as i64)
+                                    .unwrap_or(0);
+                                let last_updated_unix_100ns = last_updated_100ns - win_epoch_offset;
+                                if unix_now_100ns > last_updated_unix_100ns {
+                                    let elapsed = (unix_now_100ns - last_updated_unix_100ns) as f64 / 10_000_000.0;
+                                    if elapsed >= 0.0 && elapsed < 86400.0 {
+                                        base_pos += elapsed;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if duration_secs > 0.0 && base_pos > duration_secs {
+                        base_pos = duration_secs;
+                    }
+                    position_secs = base_pos;
                 }
 
                 if let Ok(app_id) = session.SourceAppUserModelId() {
@@ -199,12 +234,6 @@ pub mod media_bridge {
                         source_app = "Spotify".to_string();
                     } else {
                         source_app = raw;
-                    }
-                }
-
-                if let Ok(info) = session.GetPlaybackInfo() {
-                    if let Ok(status) = info.PlaybackStatus() {
-                        is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
                     }
                 }
 

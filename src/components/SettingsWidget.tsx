@@ -302,17 +302,20 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
             </div>
 
             <button
+              type="button"
+              role="switch"
+              aria-checked={isDragMode}
               onClick={() => {
                 sound.playClick();
                 onToggleDragMode(!isDragMode);
               }}
-              className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
+              className={`relative inline-flex items-center w-10 h-5 rounded-full p-0.5 shrink-0 cursor-pointer transition-colors duration-200 select-none ${
                 isDragMode ? 'bg-sky-500' : 'bg-zinc-700'
               }`}
               title={isDragMode ? 'Matikan mode geser (kunci posisi)' : 'Aktifkan mode geser'}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform ${
+              <span
+                className={`pointer-events-none block w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                   isDragMode ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
@@ -353,16 +356,20 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
           </div>
 
           <button
+            type="button"
+            role="switch"
+            aria-checked={expandOnHover}
             onClick={() => {
               sound.playClick();
               onToggleExpandOnHover(!expandOnHover);
             }}
-            className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
+            className={`relative inline-flex items-center w-10 h-5 rounded-full p-0.5 shrink-0 cursor-pointer transition-colors duration-200 select-none ${
               expandOnHover ? 'bg-sky-500' : 'bg-zinc-700'
             }`}
+            title="Aktifkan/Matikan Buka Saat Hover"
           >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
+            <span
+              className={`pointer-events-none block w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                 expandOnHover ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -384,13 +391,17 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
           </div>
 
           <button
+            type="button"
+            role="switch"
+            aria-checked={soundEnabled}
             onClick={toggleSound}
-            className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
+            className={`relative inline-flex items-center w-10 h-5 rounded-full p-0.5 shrink-0 cursor-pointer transition-colors duration-200 select-none ${
               soundEnabled ? 'bg-emerald-500' : 'bg-zinc-700'
             }`}
+            title="Aktifkan/Matikan Efek Suara"
           >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
+            <span
+              className={`pointer-events-none block w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                 soundEnabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
@@ -409,17 +420,20 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
             </div>
 
             <button
+              type="button"
+              role="switch"
+              aria-checked={showLyrics}
               onClick={() => {
                 sound.playClick();
                 onToggleShowLyrics(!showLyrics);
               }}
-              className={`w-10 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${
+              className={`relative inline-flex items-center w-10 h-5 rounded-full p-0.5 shrink-0 cursor-pointer transition-colors duration-200 select-none ${
                 showLyrics ? 'bg-emerald-500' : 'bg-zinc-700'
               }`}
               title="Aktifkan/Matikan Lirik Musik"
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform ${
+              <span
+                className={`pointer-events-none block w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                   showLyrics ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
@@ -443,14 +457,17 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
             </div>
 
             <button
+              type="button"
+              role="switch"
+              aria-checked={autoStartEnabled}
               onClick={handleToggleAutoStart}
-              className={`w-10 h-5 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+              className={`relative inline-flex items-center w-10 h-5 rounded-full p-0.5 shrink-0 cursor-pointer transition-colors duration-200 select-none ${
                 autoStartEnabled ? 'bg-amber-500' : 'bg-zinc-700'
               }`}
               title="Aktifkan/Matikan Auto Startup Windows"
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform ${
+              <span
+                className={`pointer-events-none block w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                   autoStartEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />

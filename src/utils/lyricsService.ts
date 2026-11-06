@@ -245,14 +245,21 @@ async function fetchFromLrclib(
     if (searchRes && searchRes.ok) {
       const items = await searchRes.json().catch(() => null);
       if (Array.isArray(items) && items.length > 0) {
+        const candidates = items.filter((it: any) => Boolean(it?.syncedLyrics));
         let bestItem = null;
         if (durationSecs && durationSecs > 10) {
-          bestItem = items.find(
-            (it: any) => Boolean(it?.syncedLyrics) && Math.abs((it.duration || 0) - durationSecs) <= 4
-          );
+          // Sort candidates by smallest absolute duration difference
+          candidates.sort((a: any, b: any) => {
+            const diffA = Math.abs((a.duration || 0) - durationSecs);
+            const diffB = Math.abs((b.duration || 0) - durationSecs);
+            return diffA - diffB;
+          });
+          if (candidates.length > 0 && Math.abs((candidates[0].duration || 0) - durationSecs) <= 4.0) {
+            bestItem = candidates[0];
+          }
         }
-        if (!bestItem) {
-          bestItem = items.find((it: any) => Boolean(it?.syncedLyrics));
+        if (!bestItem && candidates.length > 0) {
+          bestItem = candidates[0];
         }
         if (bestItem?.syncedLyrics) {
           const parsed = parseLrc(bestItem.syncedLyrics);
@@ -311,7 +318,8 @@ export async function fetchLyrics(
     return null;
   }
 
-  const cacheKey = `${cleanTitle.toLowerCase()}::${artist.toLowerCase()}`;
+  const durationBucket = durationSecs && durationSecs > 10 ? Math.round(durationSecs) : 0;
+  const cacheKey = `${cleanTitle.toLowerCase()}::${artist.toLowerCase()}::${durationBucket}`;
   if (lyricsCache.has(cacheKey)) {
     return lyricsCache.get(cacheKey) || null;
   }
@@ -328,20 +336,20 @@ export async function fetchLyrics(
   }
 
   try {
-    // 1. Primary Engine: NetEase Cloud Music (fast, high coverage for global & Asian hits)
-    const neteaseResult = await fetchFromNetease(cleanTitle, artist, controller.signal);
-    if (neteaseResult && neteaseResult.lines.length > 0) {
-      setInCache(cacheKey, neteaseResult);
-      return neteaseResult;
-    }
-
-    if (signal?.aborted) return null;
-
-    // 2. Secondary Engine: LRCLIB (open database with duration validation)
+    // 1. Primary Engine: LRCLIB (open Spotify-matched database with exact duration validation)
     const lrclibResult = await fetchFromLrclib(cleanTitle, artist, durationSecs, controller.signal);
     if (lrclibResult && lrclibResult.lines.length > 0) {
       setInCache(cacheKey, lrclibResult);
       return lrclibResult;
+    }
+
+    if (signal?.aborted) return null;
+
+    // 2. Secondary Engine / Fallback: NetEase Cloud Music (for tracks not found in LRCLIB)
+    const neteaseResult = await fetchFromNetease(cleanTitle, artist, controller.signal);
+    if (neteaseResult && neteaseResult.lines.length > 0) {
+      setInCache(cacheKey, neteaseResult);
+      return neteaseResult;
     }
 
     if (!signal?.aborted) {
