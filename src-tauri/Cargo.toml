@@ -1,6 +1,6 @@
 [package]
 name = "hovera"
-version = "1.0.3"
+version = "1.0.4"
 description = "Hovera - Dynamic Productivity Hub for Windows"
 authors = ["Fikko Muharavid <https://github.com/FikkoMuharavid>"]
 edition = "2024"
@@ -28,6 +28,8 @@ opener = "0.7"
 base64 = "0.22"
 lopdf = "0.46"
 image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 windows = { version = "0.62", features = [
     "Media_Control",
     "Foundation",
