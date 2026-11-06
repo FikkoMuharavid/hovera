@@ -58,7 +58,7 @@ $tauriJson.version = $Version
 $CargoTomlPath = Join-Path $RootDir "src-tauri\Cargo.toml"
 if (Test-Path $CargoTomlPath) {
     $cargoContent = Get-Content $CargoTomlPath -Raw
-    $cargoContent = $cargoContent -replace 'version\s*=\s*"[^"]+"', "version = `"$Version`""
+    $cargoContent = [regex]::Replace($cargoContent, '(?m)^version\s*=\s*"[^"]+"', "version = `"$Version`"")
     [System.IO.File]::WriteAllText($CargoTomlPath, $cargoContent, $Utf8NoBom)
 }
 
