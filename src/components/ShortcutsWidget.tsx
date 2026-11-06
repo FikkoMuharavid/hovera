@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Folder,
@@ -15,11 +15,11 @@ import {
   Search,
   ArrowLeft,
   FolderOpen,
-  Briefcase,
-  Building2,
   Clock,
   CheckCircle2,
   Pin,
+  ArrowRight,
+  ArrowUpRight,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import type { ProjectInfo } from '../types/electron';
@@ -114,38 +114,49 @@ const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   },
 ];
 
-export const ShortcutsWidget: React.FC = () => {
+export const ShortcutsWidget = React.memo(() => {
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(() => {
     try {
       const saved = localStorage.getItem('di_shortcuts');
       if (saved) {
-        let parsed: ShortcutItem[] = JSON.parse(saved);
-        // Hapus vscode jika ada di cache lama
-        parsed = parsed.filter((s) => s.id !== 'vscode');
+        const rawParsed = JSON.parse(saved);
+        if (Array.isArray(rawParsed)) {
+          let parsed: ShortcutItem[] = rawParsed.filter(Boolean);
+          // Hapus vscode jika ada di cache lama
+          parsed = parsed.filter((s) => s.id !== 'vscode');
 
-        // Pastikan Antigravity ada di urutan pertama dan menggunakan ikon VS Code serta warna biru
-        const antigravityItem: ShortcutItem = {
-          id: 'antigravity',
-          name: 'Antigravity',
-          target: 'antigravity-picker',
-          type: 'app',
-          iconType: 'vscode',
-          color: 'from-sky-500 via-blue-600 to-indigo-600',
-        };
-
-        const existingIdx = parsed.findIndex((s) => s.id === 'antigravity');
-        if (existingIdx !== -1) {
-          parsed[existingIdx] = {
-            ...parsed[existingIdx],
+          // Pastikan Antigravity ada di urutan pertama dan menggunakan ikon VS Code serta warna biru
+          const antigravityItem: ShortcutItem = {
+            id: 'antigravity',
+            name: 'Antigravity',
+            target: 'antigravity-picker',
+            type: 'app',
             iconType: 'vscode',
             color: 'from-sky-500 via-blue-600 to-indigo-600',
           };
-        } else {
-          parsed.unshift(antigravityItem);
-        }
 
-        localStorage.setItem('di_shortcuts', JSON.stringify(parsed));
-        return parsed;
+          const existingIdx = parsed.findIndex(
+            (s) => s.id === 'antigravity' || s.name.toLowerCase().includes('antigravity')
+          );
+          if (existingIdx !== -1) {
+            parsed[existingIdx] = {
+              ...parsed[existingIdx],
+              id: 'antigravity',
+              name: 'Antigravity',
+              target: 'antigravity-picker',
+              type: 'app',
+              iconType: 'vscode',
+              color: 'from-sky-500 via-blue-600 to-indigo-600',
+            };
+          } else {
+            parsed.unshift(antigravityItem);
+          }
+
+          try {
+            localStorage.setItem('di_shortcuts', JSON.stringify(parsed));
+          } catch {}
+          return parsed;
+        }
       }
     } catch {
       // fallback
@@ -159,13 +170,45 @@ export const ShortcutsWidget: React.FC = () => {
 
   // Antigravity Project Picker State
   const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>(() => {
+    try {
+      const saved = localStorage.getItem('di_user_projects');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  const userCategories = useMemo(() => {
+    const cats = new Set<string>();
+    projects.forEach((p) => {
+      if (p.category) cats.add(p.category);
+    });
+    return Array.from(cats);
+  }, [projects]);
+
+  const handleDeleteProject = (pathToDelete: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    sound.playPop();
+    setProjects((prev) => {
+      const next = prev.filter((p) => p.path !== pathToDelete);
+      try {
+        localStorage.setItem('di_user_projects', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
   const [recentPaths, setRecentPaths] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('di_recent_projects');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {
       // fallback
     }
@@ -174,13 +217,23 @@ export const ShortcutsWidget: React.FC = () => {
   const [pinnedPaths, setPinnedPaths] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('di_pinned_projects');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {
       // fallback
     }
     return [];
   });
   const [openedToast, setOpenedToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   const togglePinProject = (path: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -189,54 +242,45 @@ export const ShortcutsWidget: React.FC = () => {
       const next = prev.includes(path)
         ? prev.filter((p) => p !== path)
         : [path, ...prev];
-      localStorage.setItem('di_pinned_projects', JSON.stringify(next));
+      try {
+        localStorage.setItem('di_pinned_projects', JSON.stringify(next));
+      } catch {}
       return next;
     });
   };
 
   // Load scanned projects from Electron
   useEffect(() => {
+    let isMounted = true;
     if (window.electronAPI?.scanProjects) {
       window.electronAPI.scanProjects().then((items) => {
-        if (items && items.length > 0) {
+        if (isMounted && items && items.length > 0) {
           setProjects(items);
         }
       });
-    } else {
-      // Fallback fallback list
-      setProjects([
-        {
-          name: 'stock-aging-laravel',
-          path: 'C:\\Developer\\Program Kantor\\stock-aging-laravel',
-          category: 'Program Kantor',
-        },
-        {
-          name: 'dynamic-island',
-          path: 'C:\\Developer\\Program Freelance\\dynamic-island',
-          category: 'Program Freelance',
-        },
-        {
-          name: 'affiliator-docs-laravel',
-          path: 'C:\\Developer\\Program Kantor\\affiliator-docs-laravel',
-          category: 'Program Kantor',
-        },
-        {
-          name: 'Company Profile',
-          path: 'C:\\Developer\\Program Freelance\\Company Profile',
-          category: 'Program Freelance',
-        },
-      ]);
     }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('di_shortcuts', JSON.stringify(shortcuts));
+    try {
+      localStorage.setItem('di_shortcuts', JSON.stringify(shortcuts));
+    } catch {}
   }, [shortcuts]);
 
   const launchShortcut = (item: ShortcutItem) => {
     sound.playClick();
 
-    if (item.target === 'antigravity-picker' || item.id === 'antigravity') {
+    const isAntigravity =
+      item.id === 'antigravity' ||
+      item.id === 'vscode' ||
+      item.target === 'antigravity-picker' ||
+      item.target === 'antigravity' ||
+      item.name.toLowerCase().includes('antigravity');
+
+    if (isAntigravity) {
       setShowProjectPicker(true);
       return;
     }
@@ -258,16 +302,23 @@ export const ShortcutsWidget: React.FC = () => {
     sound.playSuccess();
     setOpenedToast(projName);
 
-    // Save to recents
-    const updated = [projPath, ...recentPaths.filter((p) => p !== projPath)].slice(0, 8);
-    setRecentPaths(updated);
-    localStorage.setItem('di_recent_projects', JSON.stringify(updated));
+    if (projPath) {
+      // Save to recents
+      const updated = [projPath, ...recentPaths.filter((p) => p !== projPath)].slice(0, 8);
+      setRecentPaths(updated);
+      try {
+        localStorage.setItem('di_recent_projects', JSON.stringify(updated));
+      } catch {}
+    }
 
     if (window.electronAPI?.openProjectInAntigravity) {
       await window.electronAPI.openProjectInAntigravity(projPath);
+    } else if (window.electronAPI?.launchApp) {
+      await window.electronAPI.launchApp('antigravity');
     }
 
-    setTimeout(() => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
       setOpenedToast(null);
       setShowProjectPicker(false);
     }, 900);
@@ -279,6 +330,16 @@ export const ShortcutsWidget: React.FC = () => {
       const selected = await window.electronAPI.selectFolder();
       if (selected) {
         const folderName = selected.split(/[\\/]/).pop() || selected;
+        setProjects((prev) => {
+          if (prev.some((p) => p.path.toLowerCase() === selected.toLowerCase())) {
+            return prev;
+          }
+          const next = [...prev, { name: folderName, path: selected, category: 'Folder Lokal' }];
+          try {
+            localStorage.setItem('di_user_projects', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         handleOpenProject(selected, folderName);
       }
     }
@@ -379,7 +440,7 @@ export const ShortcutsWidget: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2 }}
-      className="relative flex flex-col h-full w-full select-none"
+      className="relative flex flex-col flex-1 min-h-0 w-full select-none"
     >
       {/* ================= PROJECT PICKER MODAL OVERLAY ================= */}
       <AnimatePresence>
@@ -414,15 +475,28 @@ export const ShortcutsWidget: React.FC = () => {
                 </div>
               </div>
 
-              {/* Browse Folder button */}
-              <button
-                onClick={handleSelectCustomFolder}
-                className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] text-zinc-300 hover:text-white transition-colors"
-                title="Pilih folder dari disk"
-              >
-                <FolderOpen className="w-3 h-3 text-sky-400" />
-                <span>Pilih Folder...</span>
-              </button>
+              {/* Action buttons */}
+              <div className="flex items-center space-x-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenProject('', 'Antigravity IDE')}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-[10px] text-sky-300 hover:text-white transition-colors cursor-pointer"
+                  title="Buka Antigravity IDE langsung tanpa folder"
+                >
+                  <ExternalLink className="w-3 h-3 text-sky-400" />
+                  <span>Buka App</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSelectCustomFolder}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  title="Pilih folder dari disk"
+                >
+                  <FolderOpen className="w-3 h-3 text-sky-400" />
+                  <span>Pilih Folder...</span>
+                </button>
+              </div>
             </div>
 
             {/* Search Input & Category Filter */}
@@ -463,28 +537,20 @@ export const ShortcutsWidget: React.FC = () => {
                     <span>Dipin ({pinnedPaths.length})</span>
                   </button>
                 )}
-                <button
-                  onClick={() => setSelectedCategory('Program Kantor')}
-                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-md font-medium transition-colors ${
-                    selectedCategory === 'Program Kantor'
-                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Building2 className="w-2.5 h-2.5" />
-                  <span>Kantor</span>
-                </button>
-                <button
-                  onClick={() => setSelectedCategory('Program Freelance')}
-                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-md font-medium transition-colors ${
-                    selectedCategory === 'Program Freelance'
-                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Briefcase className="w-2.5 h-2.5" />
-                  <span>Freelance</span>
-                </button>
+                {userCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`flex items-center space-x-1 px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Folder className="w-2.5 h-2.5" />
+                    <span>{cat}</span>
+                  </button>
+                ))}
                 {recentPaths.length > 0 && (
                   <button
                     onClick={() => setSelectedCategory('recent')}
@@ -502,7 +568,7 @@ export const ShortcutsWidget: React.FC = () => {
             </div>
 
             {/* Project List */}
-            <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 pr-0.5">
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 pr-0.5 pb-2">
               {openedToast && (
                 <div className="flex items-center justify-center space-x-1.5 p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium animate-pulse">
                   <CheckCircle2 className="w-4 h-4" />
@@ -510,20 +576,71 @@ export const ShortcutsWidget: React.FC = () => {
                 </div>
               )}
 
+              {/* Quick direct open action card */}
+              <motion.div
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                onClick={() => handleOpenProject('', 'Antigravity IDE')}
+                role="button"
+                tabIndex={0}
+                data-interactive="true"
+                className="flex items-center justify-between p-2 rounded-xl bg-gradient-to-r from-sky-500/15 via-blue-600/15 to-indigo-600/15 hover:from-sky-500/25 hover:to-indigo-600/25 border border-sky-500/35 cursor-pointer transition-all shadow-sm mb-1.5"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+                    <VscodeIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs font-semibold text-white">
+                        Buka Antigravity IDE (Window Baru)
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-sky-500/25 text-sky-300 text-[8.5px] font-mono">
+                        Aplikasi
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 block">
+                      Buka jendela Antigravity IDE langsung tanpa membuka folder tertentu
+                    </span>
+                  </div>
+                </div>
+
+                <span className="text-[10px] text-sky-300 font-medium px-2 py-1 rounded-md bg-sky-500/20 border border-sky-500/30 flex items-center gap-1">
+                  <span>Buka App</span>
+                  <ArrowUpRight className="w-3 h-3" />
+                </span>
+              </motion.div>
+
               {sortedProjects.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-zinc-500 text-xs">
-                  <Folder className="w-6 h-6 mb-1 opacity-40" />
-                  <span>
-                    {selectedCategory === 'pinned'
-                      ? 'Belum ada project yang disematkan. Klik ikon jarum 📌 pada project untuk menyematkan.'
+                <div className="flex flex-col items-center justify-center py-6 text-zinc-500 text-xs text-center px-4">
+                  <Folder className="w-8 h-8 mb-2 opacity-40 text-indigo-400" />
+                  <span className="font-semibold text-zinc-300">
+                    {projects.length === 0
+                      ? 'Belum Ada Folder Project'
+                      : selectedCategory === 'pinned'
+                      ? 'Belum ada project yang disematkan'
                       : 'Tidak ada project yang cocok'}
                   </span>
+                  <span className="text-[10.5px] text-zinc-500 mt-1 max-w-[260px]">
+                    {projects.length === 0
+                      ? 'Pilih folder pekerjaan Anda dari komputer untuk dibuka cepat dengan Antigravity IDE.'
+                      : 'Coba ubah kata kunci pencarian atau kategori filter.'}
+                  </span>
+                  {projects.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSelectCustomFolder}
+                      className="mt-3 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-sm transition-colors cursor-pointer"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span>Pilih Folder Project</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 sortedProjects.map((p) => {
                   const isRecent = recentPaths.includes(p.path);
                   const isPinned = pinnedPaths.includes(p.path);
-                  const isKantor = p.category === 'Program Kantor';
                   return (
                     <motion.div
                       key={p.path}
@@ -541,9 +658,7 @@ export const ShortcutsWidget: React.FC = () => {
                           className={`w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0 shadow-sm ${
                             isPinned
                               ? 'bg-amber-600/80 border border-amber-400/40'
-                              : isKantor
-                              ? 'bg-blue-600/80 border border-blue-400/30'
-                              : 'bg-purple-600/80 border border-purple-400/30'
+                              : 'bg-indigo-600/80 border border-indigo-400/30'
                           }`}
                         >
                           <VscodeIcon className="w-3.5 h-3.5 text-white" />
@@ -572,8 +687,19 @@ export const ShortcutsWidget: React.FC = () => {
                       </div>
 
                       <div className="flex items-center space-x-1.5 shrink-0">
+                        {/* Tombol Hapus Project */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteProject(p.path, e)}
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                          title="Hapus dari daftar project"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Tombol Pin / Sematkan */}
                         <button
+                          type="button"
                           onClick={(e) => togglePinProject(p.path, e)}
                           className={`p-1.5 rounded-lg transition-all ${
                             isPinned
@@ -585,8 +711,9 @@ export const ShortcutsWidget: React.FC = () => {
                           <Pin className={`w-3.5 h-3.5 ${isPinned ? 'fill-current rotate-45' : ''}`} />
                         </button>
 
-                        <span className="text-[10px] text-indigo-400 group-hover:text-indigo-300 font-medium px-2 py-1 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
-                          Buka →
+                        <span className="text-[10px] text-indigo-400 group-hover:text-indigo-300 font-medium px-2 py-1 rounded-md bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors flex items-center gap-1">
+                          <span>Buka</span>
+                          <ArrowRight className="w-3 h-3" />
                         </span>
                       </div>
                     </motion.div>
@@ -599,7 +726,7 @@ export const ShortcutsWidget: React.FC = () => {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 shrink-0">
         <span className="text-xs text-zinc-300 font-medium">Pintasan Cepat (Shortcuts)</span>
         <button
           onClick={() => {
@@ -625,7 +752,7 @@ export const ShortcutsWidget: React.FC = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleAddCustom}
-            className="flex flex-col gap-1.5 pt-2 pb-1 overflow-hidden"
+            className="flex flex-col gap-1.5 pt-2 pb-1 overflow-hidden shrink-0"
           >
             <div className="flex gap-2">
               <input
@@ -654,20 +781,24 @@ export const ShortcutsWidget: React.FC = () => {
       </AnimatePresence>
 
       {/* Shortcuts Grid */}
-      <div className="grid grid-cols-4 gap-2.5 mt-2 overflow-y-auto max-h-[168px] no-scrollbar pr-0.5 pt-0.5">
+      <div className="flex-1 min-h-0 grid grid-cols-4 gap-2.5 mt-2 overflow-y-auto no-scrollbar pr-0.5 pt-0.5 content-start pb-2">
         {shortcuts.map((sc) => (
           <motion.div
             key={sc.id}
+            role="button"
+            tabIndex={0}
+            data-interactive="true"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => launchShortcut(sc)}
-            className="group relative flex flex-col items-center justify-center p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800/80 hover:border-zinc-700/80 cursor-pointer transition-colors shadow-sm"
+            className="group relative flex flex-col items-center justify-center p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800/80 hover:border-zinc-700/80 cursor-pointer transition-colors shadow-sm focus:outline-none"
           >
             {/* Custom delete button */}
             {sc.isCustom && (
               <button
+                type="button"
                 onClick={(e) => deleteShortcut(sc.id, e)}
-                className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 p-1 rounded-full bg-zinc-950 text-zinc-400 hover:text-red-400 border border-zinc-800 shadow transition-opacity"
+                className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 p-1 rounded-full bg-zinc-950 text-zinc-400 hover:text-red-400 border border-zinc-800 shadow transition-opacity cursor-pointer"
               >
                 <Trash2 className="w-2.5 h-2.5" />
               </button>
@@ -690,4 +821,4 @@ export const ShortcutsWidget: React.FC = () => {
       </div>
     </motion.div>
   );
-};
+});

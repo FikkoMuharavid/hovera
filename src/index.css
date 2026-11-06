@@ -30,7 +30,7 @@
     align-items: center;
     justify-content: flex-start;
     background: transparent !important;
-    padding-top: 10px;
+    padding-top: 0;
     box-sizing: border-box;
   }
 
@@ -57,5 +57,44 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.4);
+  }
+
+  /* Audio Equalizer Visualizer Animations (GPU-Accelerated Transforms - Zero Layout Reflow) */
+  @keyframes eqBar1 {
+    0%, 100% { transform: scaleY(0.28); }
+    50% { transform: scaleY(1); }
+  }
+  @keyframes eqBar2 {
+    0%, 100% { transform: scaleY(0.95); }
+    50% { transform: scaleY(0.35); }
+  }
+  @keyframes eqBar3 {
+    0%, 100% { transform: scaleY(0.3); }
+    50% { transform: scaleY(1); }
+  }
+  @keyframes eqBar4 {
+    0%, 100% { transform: scaleY(0.85); }
+    50% { transform: scaleY(0.25); }
+  }
+
+  .animate-eq-1 {
+    transform-origin: bottom;
+    will-change: transform;
+    animation: eqBar1 0.62s ease-in-out infinite alternate;
+  }
+  .animate-eq-2 {
+    transform-origin: bottom;
+    will-change: transform;
+    animation: eqBar2 0.78s ease-in-out infinite alternate;
+  }
+  .animate-eq-3 {
+    transform-origin: bottom;
+    will-change: transform;
+    animation: eqBar3 0.52s ease-in-out infinite alternate;
+  }
+  .animate-eq-4 {
+    transform-origin: bottom;
+    will-change: transform;
+    animation: eqBar4 0.68s ease-in-out infinite alternate;
   }
 }

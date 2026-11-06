@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Mic,
@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
   Edit3,
+  AlertCircle,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 
@@ -37,6 +38,7 @@ interface NotesWidgetProps {
   onSaveNote: (note: MeetingNote) => void;
   onDeleteNote: (id: string) => void;
   onUpdateNote: (note: MeetingNote) => void;
+  onEditingChange?: (isEditing: boolean) => void;
 
   // Recording props
   isRecording: boolean;
@@ -51,11 +53,12 @@ interface NotesWidgetProps {
   isTranscribing?: boolean;
 }
 
-export const NotesWidget: React.FC<NotesWidgetProps> = ({
+export const NotesWidget = React.memo<NotesWidgetProps>(({
   notes,
   onSaveNote,
   onDeleteNote,
   onUpdateNote,
+  onEditingChange,
   isRecording,
   recordingSeconds,
   liveTranscript,
@@ -68,10 +71,30 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
   isTranscribing = false,
 }) => {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+
+  // Beritahu parent (DynamicIsland) saat mode edit aktif/nonaktif
+  useEffect(() => {
+    onEditingChange?.(selectedNoteId !== null);
+  }, [selectedNoteId, onEditingChange]);
+
+  useEffect(() => {
+    return () => {
+      onEditingChange?.(false);
+    };
+  }, [onEditingChange]);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      if (exportTimeoutRef.current) clearTimeout(exportTimeoutRef.current);
+    };
+  }, []);
 
   const toggleCardExpand = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -116,22 +139,94 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
   };
 
   const handleSaveEdit = () => {
-    if (!selectedNote) return;
-    sound.playSuccess();
-    onUpdateNote({
-      ...selectedNote,
-      title: editTitle.trim() || 'Catatan Tanpa Judul',
-      content: editContent,
-      updatedAt: Date.now(),
-    });
+    if (selectedNote) {
+      onUpdateNote({
+        ...selectedNote,
+        title: editTitle.trim() || 'Catatan Tanpa Judul',
+        content: editContent,
+        updatedAt: Date.now(),
+      });
+    }
   };
+
+  const handleCloseAndSave = () => {
+    if (selectedNote) {
+      sound.playSuccess();
+      onUpdateNote({
+        ...selectedNote,
+        title: editTitle.trim() || 'Catatan Tanpa Judul',
+        content: editContent,
+        updatedAt: Date.now(),
+      });
+    }
+    setSelectedNoteId(null);
+  };
+
+  const onUpdateNoteRef = useRef(onUpdateNote);
+  const selectedNoteRef = useRef(selectedNote);
+  const handleCloseAndSaveRef = useRef(handleCloseAndSave);
+  const editTitleRef = useRef(editTitle);
+  const editContentRef = useRef(editContent);
+
+  useEffect(() => {
+    onUpdateNoteRef.current = onUpdateNote;
+    selectedNoteRef.current = selectedNote;
+    handleCloseAndSaveRef.current = handleCloseAndSave;
+    editTitleRef.current = editTitle;
+    editContentRef.current = editContent;
+  });
+
+  // Flush pending unwritten note edits on unmount or tab switch
+  useEffect(() => {
+    return () => {
+      if (selectedNoteRef.current) {
+        onUpdateNoteRef.current({
+          ...selectedNoteRef.current,
+          title: editTitleRef.current.trim() || 'Catatan Tanpa Judul',
+          content: editContentRef.current,
+          updatedAt: Date.now(),
+        });
+      }
+    };
+  }, []);
+
+  // Auto-save debounced saat mengetik agar tidak hilang
+  useEffect(() => {
+    if (!selectedNoteRef.current) return;
+    const timer = setTimeout(() => {
+      if (selectedNoteRef.current) {
+        onUpdateNoteRef.current({
+          ...selectedNoteRef.current,
+          title: editTitle.trim() || 'Catatan Tanpa Judul',
+          content: editContent,
+          updatedAt: Date.now(),
+        });
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [editTitle, editContent]);
+
+  // Shortcut keyboard Escape: Tutup mode edit & otomatis simpan
+  useEffect(() => {
+    if (!selectedNote) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        handleCloseAndSaveRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [selectedNote]);
 
   const handleCopyText = async (text: string, id: string) => {
     sound.playPop();
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 1800);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = setTimeout(() => setCopiedId(null), 1800);
     } catch {
       // fallback
     }
@@ -160,7 +255,8 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
       if (res.success) {
         sound.playSuccess();
         setExportSuccessMsg(`Berhasil diexport ke ${format.toUpperCase()}`);
-        setTimeout(() => setExportSuccessMsg(null), 2500);
+        if (exportTimeoutRef.current) clearTimeout(exportTimeoutRef.current);
+        exportTimeoutRef.current = setTimeout(() => setExportSuccessMsg(null), 2500);
       }
     } else {
       // Browser fallback: download as blob
@@ -172,7 +268,8 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
       a.click();
       URL.revokeObjectURL(url);
       setExportSuccessMsg(`Berhasil diunduh (.${format})`);
-      setTimeout(() => setExportSuccessMsg(null), 2500);
+      if (exportTimeoutRef.current) clearTimeout(exportTimeoutRef.current);
+      exportTimeoutRef.current = setTimeout(() => setExportSuccessMsg(null), 2500);
     }
   };
 
@@ -191,33 +288,37 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full select-none justify-between overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2 }}
+      className="flex flex-col flex-1 min-h-0 w-full select-none overflow-hidden"
+    >
       {/* ================= VIEW: NOTE DETAIL / EDITOR ================= */}
       {selectedNote ? (
         <motion.div
           initial={{ opacity: 0, x: 10 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -10 }}
-          className="flex flex-col h-full w-full justify-between"
+          className="flex flex-col flex-1 min-h-0 w-full"
         >
           {/* Editor Header */}
-          <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800">
+          <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800 shrink-0">
             <div className="flex items-center space-x-2 flex-1 mr-2">
               <button
-                onClick={() => {
-                  handleSaveEdit();
-                  setSelectedNoteId(null);
-                }}
-                className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-                title="Kembali ke Daftar Catatan"
+                onClick={handleCloseAndSave}
+                className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[10.5px] font-medium transition-colors"
+                title="Tutup & Simpan Otomatis (Esc)"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Tutup</span>
               </button>
               <input
                 type="text"
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
-                onBlur={handleSaveEdit}
+                onBlur={handleCloseAndSave}
                 placeholder="Judul Catatan / Meeting..."
                 className="bg-transparent text-xs font-semibold text-white focus:outline-none focus:border-b focus:border-sky-500 w-full truncate"
               />
@@ -272,6 +373,15 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
+
+              <button
+                onClick={handleCloseAndSave}
+                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-semibold text-[10.5px] transition-colors shadow-sm ml-1"
+                title="Selesai & Simpan Otomatis"
+              >
+                <Check className="w-3 h-3 stroke-[2.5]" />
+                <span>Selesai</span>
+              </button>
             </div>
           </div>
 
@@ -283,7 +393,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           )}
 
           {/* Note Metadata info */}
-          <div className="flex items-center space-x-3 text-[9.5px] text-zinc-500 py-1 border-b border-zinc-900">
+          <div className="flex items-center space-x-3 text-[9.5px] text-zinc-500 py-1 border-b border-zinc-900 shrink-0">
             <span className="flex items-center space-x-1">
               <Calendar className="w-2.5 h-2.5" />
               <span>{new Date(selectedNote.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
@@ -299,7 +409,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           </div>
 
           {/* Textarea Editor */}
-          <div className="flex-1 mt-1 overflow-hidden">
+          <div className="flex-1 min-h-0 mt-1 overflow-hidden">
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
@@ -312,9 +422,9 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
         </motion.div>
       ) : (
         /* ================= VIEW: MAIN NOTES & SPEECH TO TEXT RECORDER ================= */
-        <div className="flex flex-col h-full w-full justify-between">
+        <div className="flex flex-col flex-1 min-h-0 w-full">
           {/* Header Bar */}
-          <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800">
+          <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800 shrink-0">
             <div className="flex items-center space-x-1.5">
               <FileText className="w-3.5 h-3.5 text-sky-400" />
               <span className="text-xs text-zinc-200 font-semibold">Catatan & Transkrip Rapat</span>
@@ -328,7 +438,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
                 title="Ganti Bahasa Speech-to-Text"
               >
                 <Globe className="w-2.5 h-2.5 text-sky-400" />
-                <span>{speechLanguage === 'id-ID' ? '🇮🇩 ID' : '🇺🇸 EN'}</span>
+                <span className="font-semibold">{speechLanguage === 'id-ID' ? 'ID' : 'EN'}</span>
               </button>
 
               {/* Manual Note Button */}
@@ -344,7 +454,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           </div>
 
           {/* ================= RECORDING / SPEECH-TO-TEXT BAR ================= */}
-          <div className="my-1.5 p-2 rounded-xl bg-zinc-900/90 border border-zinc-800 shadow-sm flex flex-col gap-1.5">
+          <div className="my-1.5 p-2 rounded-xl bg-zinc-900/90 border border-zinc-800 shadow-sm flex flex-col gap-1.5 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <div
@@ -430,14 +540,15 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
             )}
 
             {speechError && (
-              <div className="text-[9.5px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-                ⚠️ {speechError}
+              <div className="flex items-center space-x-1.5 text-[9.5px] text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md">
+                <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                <span>{speechError}</span>
               </div>
             )}
           </div>
 
           {/* ================= NOTES LIST ================= */}
-          <div className="flex items-center justify-between pb-1">
+          <div className="flex items-center justify-between pb-1 shrink-0">
             <div className="relative flex-1 mr-2">
               <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
               <input
@@ -452,7 +563,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           </div>
 
           {/* Notes Cards Scroll View */}
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 pr-0.5 min-h-[140px]">
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar space-y-2 pr-0.5 pb-2">
             {filteredNotes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-6 text-zinc-500 text-xs">
                 <FileText className="w-6 h-6 mb-1 opacity-30" />
@@ -591,7 +702,7 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
                         </div>
 
                         {/* Full Content Textarea / Card (Scrollable & Selectable) */}
-                        <div className="p-2.5 rounded-lg bg-zinc-950/90 border border-zinc-800/80 text-[11px] text-zinc-200 font-sans leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto no-scrollbar select-text selection:bg-sky-500/30">
+                        <div className="p-2.5 rounded-lg bg-zinc-950/90 border border-zinc-800/80 text-[11px] text-zinc-200 font-sans leading-relaxed whitespace-pre-wrap max-h-[360px] overflow-y-auto no-scrollbar select-text selection:bg-sky-500/30">
                           {n.content || (
                             <span className="text-zinc-600 italic">Belum ada teks pada catatan ini.</span>
                           )}
@@ -602,10 +713,10 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
                           <button
                             onClick={() => handleOpenNote(n)}
                             className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-semibold text-[10px] transition-colors shadow-sm"
-                            title="Buka di editor penuh untuk mengedit judul dan teks"
+                            title="Edit catatan"
                           >
                             <Edit3 className="w-3 h-3" />
-                            <span>Buka Editor Lengkap</span>
+                            <span>Edit</span>
                           </button>
 
                           <div className="flex items-center space-x-1.5">
@@ -636,6 +747,6 @@ export const NotesWidget: React.FC<NotesWidgetProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
-};
+});

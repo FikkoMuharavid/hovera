@@ -30,13 +30,17 @@ interface TimeHubWidgetProps {
   onLapStopwatch: () => void;
 
   // Anniversary props
-  startYear: number;
-  onStartYearChange: (year: number) => void;
-  showAlwaysInCompact: boolean;
-  onToggleShowAlways: () => void;
+  annivEnabled?: boolean;
+  onToggleAnnivEnabled?: (val?: boolean) => void;
+  startYear?: number;
+  startMonth?: number;
+  startDay?: number;
+  onAnnivDateChange?: (day: number, month: number, year: number) => void;
+  showAlwaysInCompact?: boolean;
+  onToggleShowAlways?: () => void;
 }
 
-export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
+export const TimeHubWidget = React.memo<TimeHubWidgetProps>(({
   initialSubTab = 'clock',
   totalSeconds,
   secondsLeft,
@@ -51,14 +55,18 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
   onToggleStopwatch,
   onResetStopwatch,
   onLapStopwatch,
-  startYear,
-  onStartYearChange,
-  showAlwaysInCompact,
+  annivEnabled = false,
+  onToggleAnnivEnabled,
+  startYear = 2024,
+  startMonth = 1,
+  startDay = 14,
+  onAnnivDateChange,
+  showAlwaysInCompact = false,
   onToggleShowAlways,
 }) => {
   const [subTab, setSubTab] = useState<TimeSubTab>(initialSubTab);
 
-  const annivCalc = getAnniversaryCalculations(startYear, 1, 14);
+  const annivCalc = getAnniversaryCalculations(startYear, startMonth, startDay);
 
   const handleSubTabChange = (tab: TimeSubTab) => {
     sound.playClick();
@@ -66,9 +74,9 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full justify-between select-none">
+    <div className="flex flex-col flex-1 min-h-0 w-full select-none">
       {/* Sub-tab segmented pill switcher */}
-      <div className="flex items-center justify-center pb-1.5">
+      <div className="flex items-center justify-center pb-1.5 shrink-0">
         <div className="inline-flex items-center p-0.5 rounded-full bg-zinc-900 border border-zinc-800/90 shadow-sm">
           <button
             onClick={() => handleSubTabChange('clock')}
@@ -122,23 +130,27 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
           >
             <Heart className="w-3 h-3 fill-current text-pink-400" />
             <span>Anniv</span>
-            {(annivCalc.isAnnivToday ||
-              annivCalc.isMensiveToday ||
-              annivCalc.isMensiveApproaching) && (
-              <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse" />
-            )}
+            {annivEnabled &&
+              (annivCalc.isAnnivToday ||
+                annivCalc.isMensiveToday ||
+                annivCalc.isMensiveApproaching) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse" />
+              )}
           </button>
         </div>
       </div>
 
       {/* Content Area - Hanya satu yang tampil pada satu waktu */}
-      <div className="flex-1 overflow-hidden pt-0.5">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-0.5">
         <AnimatePresence mode="wait">
           {subTab === 'clock' && (
             <ClockWidget
               key="clock"
               onNavigateToAnniv={() => handleSubTabChange('anniv')}
+              annivEnabled={annivEnabled}
               startYear={startYear}
+              startMonth={startMonth}
+              startDay={startDay}
             />
           )}
 
@@ -170,8 +182,12 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
           {subTab === 'anniv' && (
             <AnniversaryWidget
               key="anniv"
+              annivEnabled={annivEnabled}
+              onToggleAnnivEnabled={onToggleAnnivEnabled}
               startYear={startYear}
-              onStartYearChange={onStartYearChange}
+              startMonth={startMonth}
+              startDay={startDay}
+              onDateChange={onAnnivDateChange}
               showAlwaysInCompact={showAlwaysInCompact}
               onToggleShowAlways={onToggleShowAlways}
             />
@@ -180,4 +196,4 @@ export const TimeHubWidget: React.FC<TimeHubWidgetProps> = ({
       </div>
     </div>
   );
-};
+});

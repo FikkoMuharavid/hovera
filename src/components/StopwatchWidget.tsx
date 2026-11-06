@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, RotateCcw, Flag, Clock } from 'lucide-react';
+import { Play, Pause, RotateCcw, Flag, Clock, Zap } from 'lucide-react';
 
 export interface LapRecord {
   id: number;
@@ -61,10 +61,10 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col h-full w-full select-none justify-between py-0.5"
+      className="flex flex-col flex-1 min-h-0 w-full select-none py-0.5"
     >
       {/* Header Info */}
-      <div className="flex items-center justify-between pb-1 border-b border-zinc-800/80 w-full text-xs">
+      <div className="flex items-center justify-between pb-1 border-b border-zinc-800/80 w-full text-xs shrink-0">
         <div className="flex items-center space-x-1.5 text-zinc-300 font-medium">
           <Clock className="w-3.5 h-3.5 text-emerald-400" />
           <span>Stopwatch Presisi</span>
@@ -91,7 +91,7 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
       </div>
 
       {/* Main Counter Display */}
-      <div className="flex flex-col items-center justify-center my-1.5">
+      <div className="flex flex-col items-center justify-center my-1.5 shrink-0">
         <div className="flex items-baseline space-x-1 font-mono tracking-tight text-white select-all">
           <span className="text-3xl font-bold tabular-nums drop-shadow">
             {current.min}:{current.sec}
@@ -106,7 +106,7 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
       </div>
 
       {/* Lap List / Split Records (Jika ada lap) */}
-      <div className="flex-1 overflow-y-auto no-scrollbar max-h-[64px] my-1 pr-0.5">
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar my-1 pr-0.5">
         {laps.length === 0 ? (
           <div className="flex items-center justify-center h-full text-[10.5px] text-zinc-600 italic">
             Klik tombol &quot;Putaran&quot; saat berjalan untuk mencatat waktu lap
@@ -129,7 +129,11 @@ export const StopwatchWidget: React.FC<StopwatchWidgetProps> = ({
                 >
                   <span className="font-semibold text-zinc-400">
                     Lap {lap.id}
-                    {isFastest && <span className="ml-1 text-[9px] text-emerald-400 font-sans">★ Tercepat</span>}
+                    {isFastest && (
+                      <span className="ml-1 inline-flex items-center gap-0.5 text-[9px] text-emerald-400 font-sans">
+                        <Zap className="w-2.5 h-2.5 fill-current" /> Tercepat
+                      </span>
+                    )}
                     {isSlowest && <span className="ml-1 text-[9px] text-rose-400 font-sans">Terlambat</span>}
                   </span>
                   <div className="flex items-center space-x-3">

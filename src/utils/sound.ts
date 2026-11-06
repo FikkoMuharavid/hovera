@@ -3,9 +3,13 @@ class SoundEffects {
   public enabled: boolean = true;
 
   constructor() {
-    const saved = localStorage.getItem('di_sound_enabled');
-    if (saved !== null) {
-      this.enabled = saved === 'true';
+    try {
+      const saved = localStorage.getItem('di_sound_enabled');
+      if (saved !== null) {
+        this.enabled = saved === 'true';
+      }
+    } catch {
+      this.enabled = true;
     }
   }
 
@@ -21,9 +25,26 @@ class SoundEffects {
     }
   }
 
+  /**
+   * Set sound preference silently without triggering audible pop (ideal for app boot sync)
+   */
+  public setEnabled(val: boolean): boolean {
+    this.enabled = val;
+    try {
+      localStorage.setItem('di_sound_enabled', String(this.enabled));
+    } catch {
+      // storage quota or restricted
+    }
+    return this.enabled;
+  }
+
   public toggleSound(val?: boolean) {
     this.enabled = val !== undefined ? val : !this.enabled;
-    localStorage.setItem('di_sound_enabled', String(this.enabled));
+    try {
+      localStorage.setItem('di_sound_enabled', String(this.enabled));
+    } catch {
+      // storage quota or restricted
+    }
     if (this.enabled) this.playPop();
     return this.enabled;
   }

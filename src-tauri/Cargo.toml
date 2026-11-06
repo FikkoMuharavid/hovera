@@ -1,0 +1,37 @@
+[package]
+name = "hovera"
+version = "1.0.0"
+description = "Hovera - Dynamic Productivity Hub for Windows"
+authors = ["Fikko Muharavid <https://github.com/FikkoMuharavid>"]
+edition = "2024"
+rust-version = "1.90"
+repository = "https://github.com/FikkoMuharavid/hovera"
+license = "MIT"
+
+[lib]
+name = "hovera_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+rfd = "0.15"
+winreg = "0.56"
+opener = "0.7"
+base64 = "0.22"
+lopdf = "0.46"
+image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
+windows = { version = "0.62", features = [
+    "Media_Control",
+    "Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com"
+] }

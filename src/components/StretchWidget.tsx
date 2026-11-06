@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RotateCcw, Play, Flame, Bell, Clock, AlertCircle } from 'lucide-react';
+import { RotateCcw, Play, Flame, Bell, Clock, AlertCircle, Activity, Sparkles, Move } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sound } from '../utils/sound';
 
@@ -10,7 +10,7 @@ interface StretchStep {
   target: string;
   instruction: string;
   duration: number; // in seconds
-  icon: string;
+  iconType: 'neck' | 'spine' | 'wrist' | 'legs';
   badge: string;
 }
 
@@ -21,7 +21,7 @@ const STRETCH_STEPS: StretchStep[] = [
     target: 'Leher & Bahu',
     instruction: 'Putar kepala 3x ke kiri & kanan. Tarik kedua bahu ke belakang.',
     duration: 15,
-    icon: '🙆‍♂️',
+    iconType: 'neck',
     badge: '15 Detik',
   },
   {
@@ -30,7 +30,7 @@ const STRETCH_STEPS: StretchStep[] = [
     target: 'Pinggang & Punggung',
     instruction: 'Duduk tegak, putar badan ke samping sambil pegang sandaran kursi.',
     duration: 15,
-    icon: '🧘‍♀️',
+    iconType: 'spine',
     badge: '15 Detik',
   },
   {
@@ -39,7 +39,7 @@ const STRETCH_STEPS: StretchStep[] = [
     target: 'Jari & Pergelangan',
     instruction: 'Luruskan lengan ke depan, tarik jemari ke belakang menghadap dada.',
     duration: 15,
-    icon: '🤲',
+    iconType: 'wrist',
     badge: '15 Detik',
   },
   {
@@ -48,10 +48,44 @@ const STRETCH_STEPS: StretchStep[] = [
     target: 'Kaki & Sirkulasi Darah',
     instruction: 'Berdiri dari kursi, jinjit naik-turun perlahan untuk pompa aliran darah.',
     duration: 15,
-    icon: '🦵',
+    iconType: 'legs',
     badge: '15 Detik',
   },
 ];
+
+const renderStepIcon = (type: 'neck' | 'spine' | 'wrist' | 'legs', large = false) => {
+  const sizeClass = large ? 'w-5 h-5' : 'w-3.5 h-3.5';
+  const containerClass = large
+    ? 'w-10 h-10 rounded-xl mb-1 shadow-sm'
+    : 'w-6 h-6 rounded-lg shrink-0 mt-0.5 shadow-sm';
+
+  switch (type) {
+    case 'neck':
+      return (
+        <div className={`${containerClass} bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center text-indigo-400`}>
+          <RotateCcw className={sizeClass} />
+        </div>
+      );
+    case 'spine':
+      return (
+        <div className={`${containerClass} bg-sky-500/15 border border-sky-500/25 flex items-center justify-center text-sky-400`}>
+          <Move className={sizeClass} />
+        </div>
+      );
+    case 'wrist':
+      return (
+        <div className={`${containerClass} bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400`}>
+          <Sparkles className={sizeClass} />
+        </div>
+      );
+    case 'legs':
+      return (
+        <div className={`${containerClass} bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-400`}>
+          <Activity className={sizeClass} />
+        </div>
+      );
+  }
+};
 
 interface StretchWidgetProps {
   stretchSecondsLeft: number;
@@ -273,7 +307,7 @@ export const StretchWidget: React.FC<StretchWidgetProps> = ({
               </div>
 
               <div className="flex flex-col items-center">
-                <span className="text-3xl mb-1">{STRETCH_STEPS[activeStepIndex].icon}</span>
+                {renderStepIcon(STRETCH_STEPS[activeStepIndex].iconType, true)}
                 <h4 className="text-sm font-semibold text-white">
                   {STRETCH_STEPS[activeStepIndex].title}
                 </h4>
@@ -305,7 +339,7 @@ export const StretchWidget: React.FC<StretchWidgetProps> = ({
                     key={step.id}
                     className="flex items-start space-x-2.5 p-2 rounded-xl bg-zinc-900/80 border border-zinc-800/80 hover:border-zinc-700/80 transition-all"
                   >
-                    <span className="text-xl shrink-0 mt-0.5">{step.icon}</span>
+                    {renderStepIcon(step.iconType)}
                     <div className="flex flex-col overflow-hidden">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-semibold text-zinc-100 truncate">

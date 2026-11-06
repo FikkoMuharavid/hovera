@@ -3,11 +3,12 @@ const path = require('path');
 const { exec } = require('child_process');
 
 // Optimize Chromium flags for ultra-low RAM and 0% CPU idle
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-features', 'Translate,Autofill,AudioServiceOutOfProcess,CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+app.commandLine.appendSwitch('renderer-process-limit', '1');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128 --expose-gc');
 
 let mainWindow = null;
 let tray = null;
@@ -47,7 +48,7 @@ function loadSavedWindowPosition() {
         customWindowY = Math.round(data.y);
       }
     }
-  } catch (err) {
+  } catch {
     // fallback
   }
 }
@@ -57,10 +58,20 @@ function saveWindowPosition(x, y) {
     const fs = require('fs');
     const p = getWindowStateFilePath();
     if (p) {
-      fs.writeFileSync(p, JSON.stringify({ x: Math.round(x), y: Math.round(y) }));
+      const tmp = p + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify({ x: Math.round(x), y: Math.round(y) }), 'utf8');
+      fs.renameSync(tmp, p);
     }
-  } catch (err) {
+  } catch {
     // fallback
+  }
+}
+
+function getAppSettingsFilePath() {
+  try {
+    return path.join(app.getPath('userData'), 'app-settings.json');
+  } catch {
+    return null;
   }
 }
 
@@ -71,7 +82,7 @@ function clearSavedWindowPosition() {
     if (p && fs.existsSync(p)) {
       fs.unlinkSync(p);
     }
-  } catch (err) {
+  } catch {
     // fallback
   }
 }
@@ -90,10 +101,11 @@ function updateWindowPosition() {
   }
 
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { workArea } = primaryDisplay;
+  const { bounds } = primaryDisplay;
 
-  const x = Math.round(workArea.x + (workArea.width - WINDOW_WIDTH) / 2);
-  const y = workArea.y + currentYOffset;
+  // Selalu tepat di tengah atas layar monitor fisik (center top)
+  const x = Math.round(bounds.x + (bounds.width - WINDOW_WIDTH) / 2);
+  const y = bounds.y + currentYOffset;
 
   mainWindow.setBounds({
     x,
@@ -101,6 +113,46 @@ function updateWindowPosition() {
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
   });
+}
+
+function getAppIconPath() {
+  const fs = require('fs');
+  const candidates = [
+    path.join(__dirname, 'assets/icon.png'),
+    path.join(__dirname, 'assets/icon.ico'),
+    path.join(__dirname, '../build/icon.png'),
+    path.join(__dirname, '../build/icon.ico'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return undefined;
+}
+
+function getTrayIcon() {
+  const fs = require('fs');
+  const candidates = [
+    path.join(__dirname, 'assets/tray-icon.png'),
+    path.join(__dirname, '../build/tray-icon.png'),
+    path.join(__dirname, 'assets/icon.png'),
+    path.join(__dirname, '../build/icon.png'),
+    path.join(__dirname, 'assets/icon.ico'),
+    path.join(__dirname, '../build/icon.ico'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      try {
+        const img = nativeImage.createFromPath(c);
+        if (!img.isEmpty()) {
+          return img.resize({ width: 16, height: 16 });
+        }
+      } catch {
+        // continue
+      }
+    }
+  }
+  const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAERJREFUOE9jZKAQMFKon2H4//9/BkZGRkYmJia4AiYmJhhFDIxgmhhAEY5GBoDkYHQvYgQGg+L/QG3EphmH9wZ+AAB7yQY1/J9W3wAAAABJRU5ErkJggg==';
+  return nativeImage.createFromDataURL(iconBase64);
 }
 
 function createMainWindow() {
@@ -115,11 +167,13 @@ function createMainWindow() {
     resizable: false,
     focusable: true,
     backgroundColor: '#00000000',
+    icon: getAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       devTools: process.env.NODE_ENV === 'development',
+      backgroundThrottling: true,
     },
   });
 
@@ -160,67 +214,72 @@ function createMainWindow() {
   });
 }
 
-function createTray() {
-  // 16x16 minimalist icon base64 for tray
-  const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAERJREFUOE9jZKAQMFKon2H4//9/BkZGRkYmJia4AiYmJhhFDIxgmhhAEY5GBoDkYHQvYgQGg+L/QG3EphmH9wZ+AAB7yQY1/J9W3wAAAABJRU5ErkJggg==';
-  const icon = nativeImage.createFromDataURL(iconBase64);
-  
-  tray = new Tray(icon);
-  tray.setToolTip('Dynamic Island Windows');
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Tampilkan / Sembunyikan Island',
-      click: () => {
-        if (!mainWindow) return;
+function createTray() {
+  try {
+    const icon = getTrayIcon();
+    tray = new Tray(icon);
+    tray.setToolTip('Dynamic Island Windows');
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Tampilkan / Sembunyikan Island',
+        click: () => {
+          if (!mainWindow) return;
+          if (mainWindow.isVisible()) {
+            mainWindow.hide();
+          } else {
+            mainWindow.show();
+          }
+        },
+      },
+      {
+        label: 'Reset Posisi ke Atas Tengah',
+        click: () => {
+          customWindowX = null;
+          customWindowY = null;
+          currentYOffset = 6;
+          clearSavedWindowPosition();
+          updateWindowPosition();
+          if (mainWindow) {
+            mainWindow.webContents.send('window-position-reset');
+          }
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Buka DevTools (Debug)',
+        click: () => {
+          if (mainWindow) mainWindow.webContents.openDevTools({ mode: 'detach' });
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Keluar (Quit)',
+        click: () => {
+          app.isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+
+    tray.setContextMenu(contextMenu);
+
+    tray.on('click', () => {
+      if (mainWindow) {
         if (mainWindow.isVisible()) {
           mainWindow.hide();
         } else {
           mainWindow.show();
         }
-      },
-    },
-    {
-      label: 'Reset Posisi ke Atas Tengah',
-      click: () => {
-        customWindowX = null;
-        customWindowY = null;
-        currentYOffset = 6;
-        clearSavedWindowPosition();
-        updateWindowPosition();
-        if (mainWindow) {
-          mainWindow.webContents.send('window-position-reset');
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Buka DevTools (Debug)',
-      click: () => {
-        if (mainWindow) mainWindow.webContents.openDevTools({ mode: 'detach' });
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Keluar (Quit)',
-      click: () => {
-        app.isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
-
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.warn('Failed to create system tray:', err);
+  }
 }
 
 // IPC Handlers
@@ -274,9 +333,61 @@ ipcMain.handle('reset-window-position', () => {
   return { x, y };
 });
 
+ipcMain.handle('get-app-settings', () => {
+  try {
+    const fs = require('fs');
+    const p = getAppSettingsFilePath();
+    if (p && fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
+    }
+  } catch {}
+  return {};
+});
+
+ipcMain.handle('save-app-settings', (event, settings) => {
+  try {
+    const fs = require('fs');
+    const p = getAppSettingsFilePath();
+    if (p) {
+      const tmp = p + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
+      fs.renameSync(tmp, p);
+      return true;
+    }
+  } catch {}
+  return false;
+});
+
 ipcMain.on('quit-app', () => {
   app.isQuitting = true;
   app.quit();
+});
+
+ipcMain.on('hide-window', () => {
+  if (mainWindow) {
+    mainWindow.hide();
+  }
+});
+
+ipcMain.handle('get-auto-start', () => {
+  try {
+    return app.getLoginItemSettings().openAtLogin;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('set-auto-start', (event, enable) => {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!enable,
+      path: process.execPath,
+    });
+    return app.getLoginItemSettings().openAtLogin;
+  } catch (err) {
+    console.error('Failed to set login item settings:', err);
+    return false;
+  }
 });
 
 ipcMain.handle('open-external', async (event, targetUrl) => {
@@ -293,6 +404,17 @@ ipcMain.handle('open-external', async (event, targetUrl) => {
 ipcMain.handle('launch-app', async (event, appTarget) => {
   try {
     if (!appTarget) return false;
+
+    // Direct Antigravity / Code support
+    if (appTarget === 'antigravity' || appTarget === 'antigravity-ide' || appTarget === 'code') {
+      const fs = require('fs');
+      const localAppData = process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local');
+      const antigravityExe = path.join(localAppData, 'Programs', 'Antigravity IDE', 'Antigravity IDE.exe');
+      const antigravityCmd = path.join(localAppData, 'Programs', 'Antigravity IDE', 'bin', 'antigravity-ide.cmd');
+      const targetExe = fs.existsSync(antigravityExe) ? antigravityExe : antigravityCmd;
+      exec(`"${targetExe}"`);
+      return true;
+    }
 
     // Handle common system commands & URI schemes
     const knownSchemes = ['calc', 'notepad', 'explorer', 'taskmgr', 'ms-settings:'];
@@ -320,7 +442,7 @@ ipcMain.handle('launch-app', async (event, appTarget) => {
 
 ipcMain.handle('open-project-in-antigravity', async (event, folderPath) => {
   try {
-    if (!folderPath) return false;
+    const fs = require('fs');
     const localAppData = process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local');
     const antigravityExe = path.join(
       localAppData,
@@ -328,7 +450,20 @@ ipcMain.handle('open-project-in-antigravity', async (event, folderPath) => {
       'Antigravity IDE',
       'Antigravity IDE.exe'
     );
-    exec(`"${antigravityExe}" "${folderPath}"`);
+    const antigravityCmd = path.join(
+      localAppData,
+      'Programs',
+      'Antigravity IDE',
+      'bin',
+      'antigravity-ide.cmd'
+    );
+    const targetExe = fs.existsSync(antigravityExe) ? antigravityExe : antigravityCmd;
+
+    if (folderPath && fs.existsSync(folderPath)) {
+      exec(`"${targetExe}" "${folderPath}"`);
+    } else {
+      exec(`"${targetExe}"`);
+    }
     return true;
   } catch (err) {
     console.error('Failed to open project in Antigravity:', err);
@@ -411,9 +546,32 @@ ipcMain.handle('save-note-file', async (event, { title, content, format }) => {
   }
 });
 
-// Whisper Speech-to-Text Transcriber (Local, 100% Free, No API Keys)
+// Whisper Speech-to-Text Transcriber (Local, 100% Free, No API Keys) - Lazy Loaded & Auto Unloaded
 let whisperPipelinePromise = null;
+let whisperIdleTimer = null;
+
+function scheduleWhisperUnload() {
+  if (whisperIdleTimer) clearTimeout(whisperIdleTimer);
+  whisperIdleTimer = setTimeout(() => {
+    if (whisperPipelinePromise) {
+      whisperPipelinePromise = null;
+      if (global.gc) {
+        try {
+          global.gc();
+        } catch {
+          // ignore
+        }
+      }
+      console.log('Whisper AI pipeline unloaded from RAM after idle timeout');
+    }
+  }, 180000); // 3 minutes idle
+}
+
 async function getWhisperTranscriber() {
+  if (whisperIdleTimer) {
+    clearTimeout(whisperIdleTimer);
+    whisperIdleTimer = null;
+  }
   if (!whisperPipelinePromise) {
     const { pipeline, env } = await import('@xenova/transformers');
     env.allowLocalModels = true;
@@ -422,21 +580,93 @@ async function getWhisperTranscriber() {
   return whisperPipelinePromise;
 }
 
+function cleanRepetitiveText(text) {
+  if (!text || typeof text !== 'string') return '';
+  let str = text.trim();
+
+  // Strip brackets like [MENU], [music], etc.
+  str = str.replace(/\[.*?\]|\(.*?\)/g, '');
+
+  // Strip rogue Asian/CJK characters hallucinated on low-volume frames
+  str = str.replace(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/g, '');
+
+  // 1. Remove repeated phrases separated by commas, periods, or semicolons
+  const chunks = str.split(/[,.\n;]+/).map((s) => s.trim()).filter(Boolean);
+  if (chunks.length >= 2) {
+    const counts = {};
+    for (const c of chunks) {
+      const lower = c.toLowerCase();
+      counts[lower] = (counts[lower] || 0) + 1;
+    }
+    const maxCount = Math.max(...Object.values(counts));
+    if (maxCount >= 2 && maxCount / chunks.length >= 0.35) {
+      const uniqueChunks = [];
+      for (const c of chunks) {
+        if (!uniqueChunks.some((u) => u.toLowerCase() === c.toLowerCase())) {
+          uniqueChunks.push(c);
+        }
+      }
+      str = uniqueChunks.join(', ') + '.';
+    }
+  }
+
+  // 2. Remove repeating n-word patterns (e.g., "jauh baru jauh baru")
+  for (let n = 4; n >= 1; n--) {
+    const w = str.split(/\s+/);
+    if (w.length >= n * 2) {
+      const result = [];
+      for (let i = 0; i < w.length; i++) {
+        if (i + n <= w.length && result.length >= n) {
+          const sliceCurr = w.slice(i, i + n).join(' ').toLowerCase().replace(/[^\w\s]/g, '');
+          const slicePrev = result.slice(result.length - n).join(' ').toLowerCase().replace(/[^\w\s]/g, '');
+          if (sliceCurr && sliceCurr === slicePrev) {
+            i += n - 1; // skip this repeated phrase
+            continue;
+          }
+        }
+        result.push(w[i]);
+      }
+      str = result.join(' ');
+    }
+  }
+
+  // Strip common YouTube closing subtitle hallucinations if appearing in isolation
+  if (/^(terima kasih( kerana| banyak)?|thank you( for watching)?)[.!?]?$/i.test(str)) {
+    return '';
+  }
+
+  return str.trim();
+}
+
 ipcMain.handle('transcribe-audio', async (event, { audioSamples, language }) => {
   try {
     const transcriber = await getWhisperTranscriber();
     const float32 = audioSamples instanceof Float32Array ? audioSamples : Float32Array.from(audioSamples);
     const lang = language === 'en-US' || language === 'english' ? 'english' : 'indonesian';
-    const output = await transcriber(float32, {
+
+    const options = {
       language: lang,
       task: 'transcribe',
-      chunk_length_s: 30,
-      stride_length_s: 5,
-    });
-    return { success: true, text: (output?.text || '').trim() };
+      temperature: 0,
+      condition_on_previous_text: false,
+      do_sample: false,
+      num_beams: 1,
+    };
+
+    // Only apply chunking if audio is longer than 25 seconds
+    if (float32.length > 16000 * 25) {
+      options.chunk_length_s = 30;
+      options.stride_length_s = 5;
+    }
+
+    const output = await transcriber(float32, options);
+    const cleaned = cleanRepetitiveText(output?.text || '');
+    return { success: true, text: cleaned };
   } catch (err) {
     console.error('Whisper transcription error:', err);
     return { success: false, error: err.message || String(err) };
+  } finally {
+    scheduleWhisperUnload();
   }
 });
 

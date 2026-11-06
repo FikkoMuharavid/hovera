@@ -9,23 +9,27 @@ export interface Task {
   text: string;
   completed: boolean;
   createdAt: number;
+  completedAt?: number;
 }
 
 interface TodoWidgetProps {
   onTasksUpdate?: (count: number) => void;
 }
 
-export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
+export const TodoWidget = React.memo<TodoWidgetProps>(({ onTasksUpdate }) => {
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const saved = localStorage.getItem('di_tasks');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {
       // fallback
     }
     return [
       { id: '1', text: 'Buka laptop & review task hari ini', completed: true, createdAt: Date.now() - 3600000 },
-      { id: '2', text: 'Kerjakan project Dynamic Island', completed: false, createdAt: Date.now() - 1800000 },
+      { id: '2', text: 'Selesaikan prioritas pekerjaan utama', completed: false, createdAt: Date.now() - 1800000 },
       { id: '3', text: 'Istirahat & minum air putih', completed: false, createdAt: Date.now() },
     ];
   });
@@ -34,8 +38,10 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
 
   useEffect(() => {
-    localStorage.setItem('di_tasks', JSON.stringify(tasks));
-    const activeCount = tasks.filter((t) => !t.completed).length;
+    try {
+      localStorage.setItem('di_tasks', JSON.stringify(tasks));
+    } catch {}
+    const activeCount = Array.isArray(tasks) ? tasks.filter((t) => t && !t.completed).length : 0;
     onTasksUpdate?.(activeCount);
   }, [tasks, onTasksUpdate]);
 
@@ -75,7 +81,11 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
               // fallback
             }
           }
-          return { ...t, completed: nextState };
+          return {
+            ...t,
+            completed: nextState,
+            completedAt: nextState ? Date.now() : undefined,
+          };
         }
         return t;
       })
@@ -88,11 +98,23 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    if (filter === 'active') return !t.completed;
-    if (filter === 'completed') return t.completed;
-    return true;
-  });
+  const filteredTasks = tasks
+    .filter((t) => {
+      if (filter === 'active') return !t.completed;
+      if (filter === 'completed') return t.completed;
+      return true;
+    })
+    .sort((a, b) => {
+      // Tugas belum selesai di atas, tugas selesai bergeser ke bawah
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1;
+      }
+      // Jika sama-sama selesai, urutkan berdasarkan waktu selesai (yang baru selesai berada di paling bawah)
+      if (a.completed && b.completed) {
+        return (a.completedAt ?? 0) - (b.completedAt ?? 0);
+      }
+      return 0;
+    });
 
   const completedCount = tasks.filter((t) => t.completed).length;
 
@@ -102,10 +124,10 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.2 }}
-      className="flex flex-col h-full w-full select-none"
+      className="flex flex-col flex-1 min-h-0 w-full select-none"
     >
       {/* Header bar */}
-      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+      <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80 shrink-0">
         <div className="flex items-center space-x-1.5 text-xs text-zinc-300 font-medium">
           <ListTodo className="w-3.5 h-3.5 text-sky-400" />
           <span>Tugas Saya</span>
@@ -136,7 +158,7 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
       </div>
 
       {/* Input box */}
-      <form onSubmit={addTask} className="relative mt-2.5 mb-1.5">
+      <form onSubmit={addTask} className="relative mt-2.5 mb-1.5 shrink-0">
         <input
           type="text"
           value={inputVal}
@@ -153,7 +175,7 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
       </form>
 
       {/* Task list container */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-1.5 pr-0.5 max-h-[145px] pt-1 no-scrollbar">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-1.5 pr-0.5 pt-1 pb-2 no-scrollbar">
         <AnimatePresence mode="popLayout" initial={false}>
           {filteredTasks.length === 0 ? (
             <motion.div
@@ -181,9 +203,9 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
                     : 'bg-zinc-900/90 border-zinc-800/80 text-zinc-200 hover:border-zinc-700/80'
                 }`}
               >
-                <div className="flex items-center space-x-2.5 overflow-hidden">
+                <div className="flex items-center space-x-2.5 overflow-hidden flex-1 min-w-0">
                   <div
-                    className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                    className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all shrink-0 ${
                       task.completed
                         ? 'bg-emerald-500 border-emerald-500 text-black'
                         : 'border-zinc-600 group-hover:border-zinc-400'
@@ -202,7 +224,7 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
 
                 <button
                   onClick={(e) => deleteTask(task.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-red-400 rounded-md transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-zinc-500 hover:text-red-400 rounded-md transition-opacity shrink-0 ml-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -213,4 +235,4 @@ export const TodoWidget: React.FC<TodoWidgetProps> = ({ onTasksUpdate }) => {
       </div>
     </motion.div>
   );
-};
+});
