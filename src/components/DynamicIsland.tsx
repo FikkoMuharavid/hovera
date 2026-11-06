@@ -2052,7 +2052,7 @@ export const DynamicIsland: React.FC = () => {
               </div>
 
               {/* Now Playing Banner when media is active or has title */}
-              {(isMediaPlaying || mediaState.title) && (
+              {Boolean(mediaState.title && mediaState.title.trim().length > 0 && (isMediaPlaying || mediaAudioPeak > 0.015)) && (
                 <div className="flex flex-col px-3 py-1.5 mt-1.5 mb-1 rounded-xl bg-zinc-900/90 border border-zinc-800/80 shadow-md shrink-0 select-none">
                   {/* Top Row: Track info & Controls */}
                   <div className="flex items-center justify-between">

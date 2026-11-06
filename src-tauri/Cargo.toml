@@ -33,6 +33,7 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 windows = { version = "0.62", features = [
     "Media_Control",
     "Foundation",
+    "Foundation_Collections",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Win32_System_Com"

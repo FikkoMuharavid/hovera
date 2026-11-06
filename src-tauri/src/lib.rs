@@ -147,16 +147,179 @@ pub mod media_bridge {
         pub duration_secs: f64,
     }
 
-    pub fn get_media_metadata() -> MediaMetadata {
-        let mut is_playing = false;
+    fn is_ignored_media(source_app: &str, title: &str, artist: &str) -> bool {
+        let app_lower = source_app.to_lowercase();
+        let title_lower = title.to_lowercase();
+        let artist_lower = artist.to_lowercase();
+
+        // 1. Applications to ignore: video/audio editors, conferencing, meetings, calls, screen recorders
+        const IGNORED_APPS: &[&str] = &[
+            "capcut",
+            "lemon.capcut",
+            "zoom",
+            "cpthost",
+            "teams",
+            "msteams",
+            "discord",
+            "skype",
+            "webex",
+            "ciscocollabhost",
+            "slack",
+            "whatsapp",
+            "telegram",
+            "premiere",
+            "afterfx",
+            "resolve",
+            "davinci",
+            "audacity",
+            "filmora",
+            "camtasia",
+            "obs64",
+            "obs32",
+            "obs",
+            "streamlabs",
+        ];
+
+        for ignored in IGNORED_APPS {
+            if app_lower.contains(ignored) {
+                return true;
+            }
+        }
+
+        // 2. Browser meeting tabs or conference titles
+        const IGNORED_TITLES: &[&str] = &[
+            "meet - ",
+            "google meet",
+            "zoom meeting",
+            "zoom workplace",
+            "microsoft teams",
+            "discord |",
+            "whatsapp call",
+            "telegram call",
+            "webex meeting",
+        ];
+
+        for ignored in IGNORED_TITLES {
+            if title_lower.contains(ignored) || artist_lower.contains(ignored) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn extract_session_metadata(
+        session: &windows::Media::Control::GlobalSystemMediaTransportControlsSession,
+    ) -> Option<MediaMetadata> {
+        let mut source_app = String::new();
+        if let Ok(app_id) = session.SourceAppUserModelId() {
+            let raw = app_id.to_string();
+            let raw_lower = raw.to_lowercase();
+            if raw_lower.contains("brave") {
+                source_app = "Brave".to_string();
+            } else if raw_lower.contains("chrome") {
+                source_app = "Chrome".to_string();
+            } else if raw_lower.contains("edge") {
+                source_app = "Edge".to_string();
+            } else if raw_lower.contains("firefox") {
+                source_app = "Firefox".to_string();
+            } else if raw_lower.contains("spotify") {
+                source_app = "Spotify".to_string();
+            } else {
+                source_app = raw;
+            }
+        }
+
         let mut title = String::new();
         let mut artist = String::new();
-        let mut source_app = String::new();
+        if let Ok(props_op) = session.TryGetMediaPropertiesAsync() {
+            if let Ok(props) = props_op.join() {
+                if let Ok(t) = props.Title() {
+                    title = t.to_string();
+                }
+                if let Ok(a) = props.Artist() {
+                    artist = a.to_string();
+                }
+            }
+        }
+
+        // Filter out non-music applications (Zoom, CapCut, Teams, etc.)
+        if is_ignored_media(&source_app, &title, &artist) {
+            return None;
+        }
+
+        if title.trim().is_empty() {
+            return None;
+        }
+
+        let mut is_playing = false;
+        if let Ok(info) = session.GetPlaybackInfo() {
+            if let Ok(status) = info.PlaybackStatus() {
+                is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+            }
+        }
+
         let mut position_secs: f64 = 0.0;
         let mut duration_secs: f64 = 0.0;
 
+        if let Ok(timeline) = session.GetTimelineProperties() {
+            let mut base_pos: f64 = 0.0;
+            if let Ok(pos) = timeline.Position() {
+                let s = (pos.Duration as f64) / 10_000_000.0;
+                if s >= 0.0 && s.is_finite() {
+                    base_pos = s;
+                }
+            }
+            if let Ok(end) = timeline.EndTime() {
+                let s = (end.Duration as f64) / 10_000_000.0;
+                if s >= 0.0 && s.is_finite() {
+                    duration_secs = s;
+                }
+            }
+
+            // Windows GSMTC position is reported as-of LastUpdatedTime!
+            // If playing, interpolate the elapsed real time so timeline stays perfectly synced
+            // across media players (Spotify, Brave, Chrome, etc.)
+            if is_playing {
+                if let Ok(last_updated) = timeline.LastUpdatedTime() {
+                    let win_epoch_offset = 116_444_736_000_000_000i64;
+                    let last_updated_100ns = last_updated.UniversalTime;
+                    if last_updated_100ns > win_epoch_offset {
+                        let unix_now_100ns = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| (d.as_nanos() / 100) as i64)
+                            .unwrap_or(0);
+                        let last_updated_unix_100ns = last_updated_100ns - win_epoch_offset;
+                        if unix_now_100ns > last_updated_unix_100ns {
+                            let elapsed = (unix_now_100ns - last_updated_unix_100ns) as f64 / 10_000_000.0;
+                            if elapsed >= 0.0 && elapsed < 86400.0 {
+                                base_pos += elapsed;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if duration_secs > 0.0 && base_pos > duration_secs {
+                base_pos = duration_secs;
+            }
+            position_secs = base_pos;
+        }
+
+        Some(MediaMetadata {
+            is_playing,
+            title,
+            artist,
+            source_app,
+            position_secs,
+            duration_secs,
+        })
+    }
+
+    pub fn get_media_metadata() -> MediaMetadata {
         let manager = get_gsmtc_manager();
         if let Some(manager) = manager {
+            // 1. Check current active session first
             let session_res = manager.GetCurrentSession();
             let session = match session_res {
                 Ok(s) => Ok(s),
@@ -167,106 +330,47 @@ pub mod media_bridge {
                 }
             };
 
-            if let Ok(session) = session {
-                if let Ok(info) = session.GetPlaybackInfo() {
-                    if let Ok(status) = info.PlaybackStatus() {
-                        is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-                    }
+            if let Ok(curr_session) = session {
+                if let Some(meta) = extract_session_metadata(&curr_session) {
+                    return meta;
                 }
+            }
 
-                if let Ok(timeline) = session.GetTimelineProperties() {
-                    let mut base_pos: f64 = 0.0;
-                    if let Ok(pos) = timeline.Position() {
-                        let s = (pos.Duration as f64) / 10_000_000.0;
-                        if s >= 0.0 && s.is_finite() {
-                            base_pos = s;
-                        }
-                    }
-                    if let Ok(end) = timeline.EndTime() {
-                        let s = (end.Duration as f64) / 10_000_000.0;
-                        if s >= 0.0 && s.is_finite() {
-                            duration_secs = s;
-                        }
-                    }
-
-                    // Windows GSMTC position is reported as-of LastUpdatedTime!
-                    // If playing, interpolate the elapsed real time so timeline stays perfectly synced
-                    // across media players (Spotify, Brave, Chrome, etc.)
-                    if is_playing {
-                        if let Ok(last_updated) = timeline.LastUpdatedTime() {
-                            let win_epoch_offset = 116_444_736_000_000_000i64;
-                            let last_updated_100ns = last_updated.UniversalTime;
-                            if last_updated_100ns > win_epoch_offset {
-                                let unix_now_100ns = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .map(|d| (d.as_nanos() / 100) as i64)
-                                    .unwrap_or(0);
-                                let last_updated_unix_100ns = last_updated_100ns - win_epoch_offset;
-                                if unix_now_100ns > last_updated_unix_100ns {
-                                    let elapsed = (unix_now_100ns - last_updated_unix_100ns) as f64 / 10_000_000.0;
-                                    if elapsed >= 0.0 && elapsed < 86400.0 {
-                                        base_pos += elapsed;
-                                    }
+            // 2. If current session is ignored (e.g. CapCut or Zoom active on screen) or invalid,
+            // iterate all sessions to find an active music session (e.g. Spotify playing in background)
+            if let Ok(sessions) = manager.GetSessions() {
+                if let Ok(size) = sessions.Size() {
+                    let mut candidate: Option<MediaMetadata> = None;
+                    for i in 0..size {
+                        if let Ok(s) = sessions.GetAt(i) {
+                            if let Some(meta) = extract_session_metadata(&s) {
+                                if meta.is_playing {
+                                    return meta;
+                                }
+                                if candidate.is_none() {
+                                    candidate = Some(meta);
                                 }
                             }
                         }
                     }
-
-                    if duration_secs > 0.0 && base_pos > duration_secs {
-                        base_pos = duration_secs;
-                    }
-                    position_secs = base_pos;
-                }
-
-                if let Ok(app_id) = session.SourceAppUserModelId() {
-                    let raw = app_id.to_string();
-                    // Simplify browser source name
-                    let raw_lower = raw.to_lowercase();
-                    if raw_lower.contains("brave") {
-                        source_app = "Brave".to_string();
-                    } else if raw_lower.contains("chrome") {
-                        source_app = "Chrome".to_string();
-                    } else if raw_lower.contains("edge") {
-                        source_app = "Edge".to_string();
-                    } else if raw_lower.contains("firefox") {
-                        source_app = "Firefox".to_string();
-                    } else if raw_lower.contains("spotify") {
-                        source_app = "Spotify".to_string();
-                    } else {
-                        source_app = raw;
-                    }
-                }
-
-                if let Ok(props_op) = session.TryGetMediaPropertiesAsync() {
-                    if let Ok(props) = props_op.join() {
-                        if let Ok(t) = props.Title() {
-                            title = t.to_string();
-                        }
-                        if let Ok(a) = props.Artist() {
-                            artist = a.to_string();
-                        }
+                    if let Some(meta) = candidate {
+                        return meta;
                     }
                 }
             }
         }
 
-        MediaMetadata {
-            is_playing,
-            title,
-            artist,
-            source_app,
-            position_secs,
-            duration_secs,
-        }
+        MediaMetadata::default()
     }
 
     pub fn get_current_media_state() -> MediaState {
         let meta = get_media_metadata();
         let audio_peak = get_system_audio_peak();
+        let has_track = !meta.title.is_empty();
 
         let mut is_playing = meta.is_playing;
-        // If audio peak is noticeable (> 0.015), mark is_playing as true even if browser status lagged
-        if audio_peak > 0.015 && !meta.title.is_empty() {
+        // Audio peak only confirms playback if there is a legitimate, recognized music track!
+        if audio_peak > 0.015 && has_track {
             is_playing = true;
         }
 
@@ -275,7 +379,7 @@ pub mod media_bridge {
             title: meta.title,
             artist: meta.artist,
             source_app: meta.source_app,
-            audio_peak,
+            audio_peak: if has_track { audio_peak } else { 0.0 },
             position_secs: meta.position_secs,
             duration_secs: meta.duration_secs,
         }
@@ -283,25 +387,46 @@ pub mod media_bridge {
 
     pub fn toggle_play() -> bool {
         if let Some(manager) = get_gsmtc_manager() {
+            // Check current session if not ignored
             if let Ok(session) = manager.GetCurrentSession() {
-                // 1. Try explicit Toggle
-                if let Ok(ctrl) = session.TryTogglePlayPauseAsync() {
-                    if let Ok(res) = ctrl.join() {
-                        if res {
-                            return true;
+                let app = session.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                if !is_ignored_media(&app, "", "") {
+                    if let Ok(ctrl) = session.TryTogglePlayPauseAsync() {
+                        if let Ok(res) = ctrl.join() {
+                            if res {
+                                return true;
+                            }
+                        }
+                    }
+                    if let Ok(info) = session.GetPlaybackInfo() {
+                        if let Ok(status) = info.PlaybackStatus() {
+                            if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
+                                if let Ok(ctrl) = session.TryPauseAsync() {
+                                    return ctrl.join().unwrap_or(false);
+                                }
+                            } else {
+                                if let Ok(ctrl) = session.TryPlayAsync() {
+                                    return ctrl.join().unwrap_or(false);
+                                }
+                            }
                         }
                     }
                 }
-                // 2. Fallback: check status and call Play or Pause
-                if let Ok(info) = session.GetPlaybackInfo() {
-                    if let Ok(status) = info.PlaybackStatus() {
-                        if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
-                            if let Ok(ctrl) = session.TryPauseAsync() {
-                                return ctrl.join().unwrap_or(false);
-                            }
-                        } else {
-                            if let Ok(ctrl) = session.TryPlayAsync() {
-                                return ctrl.join().unwrap_or(false);
+            }
+            // Check other non-ignored sessions (e.g. Spotify)
+            if let Ok(sessions) = manager.GetSessions() {
+                if let Ok(size) = sessions.Size() {
+                    for i in 0..size {
+                        if let Ok(s) = sessions.GetAt(i) {
+                            let app = s.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                            if !is_ignored_media(&app, "", "") {
+                                if let Ok(ctrl) = s.TryTogglePlayPauseAsync() {
+                                    if let Ok(res) = ctrl.join() {
+                                        if res {
+                                            return true;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -314,8 +439,33 @@ pub mod media_bridge {
     pub fn skip_next() -> bool {
         if let Some(manager) = get_gsmtc_manager() {
             if let Ok(session) = manager.GetCurrentSession() {
-                if let Ok(ctrl) = session.TrySkipNextAsync() {
-                    return ctrl.join().unwrap_or(false);
+                let app = session.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                if !is_ignored_media(&app, "", "") {
+                    if let Ok(ctrl) = session.TrySkipNextAsync() {
+                        if let Ok(res) = ctrl.join() {
+                            if res {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Ok(sessions) = manager.GetSessions() {
+                if let Ok(size) = sessions.Size() {
+                    for i in 0..size {
+                        if let Ok(s) = sessions.GetAt(i) {
+                            let app = s.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                            if !is_ignored_media(&app, "", "") {
+                                if let Ok(ctrl) = s.TrySkipNextAsync() {
+                                    if let Ok(res) = ctrl.join() {
+                                        if res {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -325,8 +475,33 @@ pub mod media_bridge {
     pub fn skip_prev() -> bool {
         if let Some(manager) = get_gsmtc_manager() {
             if let Ok(session) = manager.GetCurrentSession() {
-                if let Ok(ctrl) = session.TrySkipPreviousAsync() {
-                    return ctrl.join().unwrap_or(false);
+                let app = session.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                if !is_ignored_media(&app, "", "") {
+                    if let Ok(ctrl) = session.TrySkipPreviousAsync() {
+                        if let Ok(res) = ctrl.join() {
+                            if res {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Ok(sessions) = manager.GetSessions() {
+                if let Ok(size) = sessions.Size() {
+                    for i in 0..size {
+                        if let Ok(s) = sessions.GetAt(i) {
+                            let app = s.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default();
+                            if !is_ignored_media(&app, "", "") {
+                                if let Ok(ctrl) = s.TrySkipPreviousAsync() {
+                                    if let Ok(res) = ctrl.join() {
+                                        if res {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2337,7 +2512,8 @@ pub fn run() {
 
                 loop {
                     let audio_peak = media_bridge::get_system_audio_peak();
-                    let is_active = cached_meta.is_playing || audio_peak > 0.012;
+                    let has_track = !cached_meta.title.is_empty();
+                    let is_active = has_track && (cached_meta.is_playing || audio_peak > 0.012);
 
                     meta_refresh_ticks += 1;
                     let should_refresh_meta = if is_active {
@@ -2361,7 +2537,7 @@ pub fn run() {
                         title: cached_meta.title.clone(),
                         artist: cached_meta.artist.clone(),
                         source_app: cached_meta.source_app.clone(),
-                        audio_peak,
+                        audio_peak: if has_track { audio_peak } else { 0.0 },
                         position_secs: cached_meta.position_secs,
                         duration_secs: cached_meta.duration_secs,
                     };

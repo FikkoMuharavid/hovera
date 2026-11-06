@@ -98,8 +98,9 @@ export const CompactView = React.memo<CompactViewProps>(({
     );
   }
 
-  // Hanya aktif jika memang ada badge notifikasi yang akan ditampilkan
-  const isMediaActive = mediaPlaying || (mediaPeak !== undefined && mediaPeak > 0.012);
+  // Mode musik hanya aktif jika terdeteksi lagu/media beridentitas judul resmi
+  const hasValidMediaTrack = Boolean(mediaTitle && mediaTitle.trim().length > 0);
+  const isMediaActive = hasValidMediaTrack && (mediaPlaying || (mediaPeak !== undefined && mediaPeak > 0.012));
 
   const hasMedia = isMediaActive;
   const hasRecording = isRecording;
