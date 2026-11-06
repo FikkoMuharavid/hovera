@@ -62,10 +62,16 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
   const [updateProgress, setUpdateProgress] = useState<{ percent: number; downloaded: number; total: number } | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [appVersion, setAppVersion] = useState('1.0.0');
 
   useEffect(() => {
     if (initialUpdateInfo) {
       setUpdateInfo(initialUpdateInfo);
+    }
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then((v) => {
+        if (v) setAppVersion(v.replace(/^v/, ''));
+      });
     }
   }, [initialUpdateInfo]);
 
@@ -81,7 +87,7 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
           setUpdateInfo(res);
         } else {
           setUpdateInfo(null);
-          setUpdateStatusMessage('Hovera sudah versi terbaru (v1.0.0)');
+          setUpdateStatusMessage(`Hovera sudah versi terbaru (v${appVersion})`);
           setTimeout(() => setUpdateStatusMessage(null), 4000);
         }
       } else {
@@ -476,7 +482,7 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
                 <div className="flex items-center space-x-2">
                   <span className="text-xs text-zinc-200 font-medium">Pembaruan Aplikasi</span>
                   <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 text-[9px] font-mono border border-cyan-500/20">
-                    v1.0.0
+                    v{appVersion}
                   </span>
                 </div>
                 <span className="text-[10px] text-zinc-500">

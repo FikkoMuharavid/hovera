@@ -12,7 +12,9 @@ param (
     [Parameter(Mandatory = $false, HelpMessage = "Catatan pembaruan / changelog")]
     [string]$Notes = "Pembaruan rutin stabilitas dan peningkatan fitur.",
 
-    [switch]$SkipBuild = $false
+    [switch]$SkipBuild = $false,
+
+    [switch]$AutoPublish = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,7 +54,27 @@ $tauriJson = Get-Content $TauriConfPath -Raw | ConvertFrom-Json
 $tauriJson.version = $Version
 [System.IO.File]::WriteAllText($TauriConfPath, ($tauriJson | ConvertTo-Json -Depth 10), $Utf8NoBom)
 
-Write-Host "[OK] package.json & tauri.conf.json disinkronkan ke v$Version" -ForegroundColor Green
+# Update Cargo.toml
+$CargoTomlPath = Join-Path $RootDir "src-tauri\Cargo.toml"
+if (Test-Path $CargoTomlPath) {
+    $cargoContent = Get-Content $CargoTomlPath -Raw
+    $cargoContent = $cargoContent -replace 'version\s*=\s*"[^"]+"', "version = `"$Version`""
+    [System.IO.File]::WriteAllText($CargoTomlPath, $cargoContent, $Utf8NoBom)
+}
+
+Write-Host "[OK] package.json, tauri.conf.json & Cargo.toml disinkronkan ke v$Version" -ForegroundColor Green
+
+# Commit pembaruan versi ke git
+Push-Location $RootDir
+try {
+    git add $PackageJsonPath $TauriConfPath $CargoTomlPath
+    git commit -m "chore(release): bump version to v$Version"
+    git push origin main
+} catch {
+    Write-Host "[INFO] Tidak ada perubahan git baru untuk di-commit." -ForegroundColor DarkGray
+} finally {
+    Pop-Location
+}
 
 # 3. Kompilasi Frontend & Bundle Tauri
 if (-not $SkipBuild) {
@@ -145,6 +167,13 @@ Write-Host "========================================================" -Foregroun
 Write-Host "Tag Rilis    : v$Version" -ForegroundColor White
 Write-Host "Catatan      : $Notes" -ForegroundColor White
 Write-Host "Berkas Paket : $ReleaseFolder" -ForegroundColor Yellow
+
+if ($AutoPublish) {
+    Write-Host "`n[5/5] Mempublikasikan ke GitHub Releases secara otomatis via API..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot "publish-release-github.ps1") -Version $Version -Notes $Notes
+    Write-Host "`n[SUKSES] Rilis v$Version berhasil dipublikasikan ke GitHub!" -ForegroundColor Green
+    exit 0
+}
 
 $ghInstalled = Get-Command gh -ErrorAction SilentlyContinue
 

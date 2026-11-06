@@ -93,6 +93,7 @@ export interface ElectronAPI {
     folderName: string;
   }) => Promise<{ success: boolean; folderPath: string; totalCount: number; files: string[] }>;
   fetchUrlText?: (url: string) => Promise<string>;
+  getAppVersion?: () => Promise<string>;
   checkForUpdates?: () => Promise<UpdateInfo>;
   installAppUpdate?: () => Promise<{ success: boolean; error?: string }>;
   onUpdateProgress?: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => () => void;

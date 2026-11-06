@@ -191,6 +191,14 @@ export function initTauriBridge(): void {
     fetchUrlText: async (url: string) => {
       return await invoke<string>('fetch_url_text', { url });
     },
+    getAppVersion: async () => {
+      try {
+        const { getVersion } = await import('@tauri-apps/api/app');
+        return await getVersion();
+      } catch {
+        return '1.0.1';
+      }
+    },
     checkForUpdates: async () => {
       try {
         return await invoke<any>('hovera_check_updates');
