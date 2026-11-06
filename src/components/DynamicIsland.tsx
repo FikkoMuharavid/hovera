@@ -73,12 +73,10 @@ export const DynamicIsland: React.FC = () => {
     setDownloaderProgress(progress);
   }, []);
 
-  // Mouse Scroll & Pan Navigation for Tabs
+  // Mouse Scroll Navigation for Tabs
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const tabsPointerStartRef = useRef<{ x: number; scrollLeft: number } | null>(null);
-  const tabsHasDraggedRef = useRef<boolean>(false);
 
   const updateScrollIndicators = useCallback(() => {
     const el = tabsContainerRef.current;
@@ -148,39 +146,6 @@ export const DynamicIsland: React.FC = () => {
     return () => clearTimeout(timer);
   }, [activeTab, isExpanded, updateScrollIndicators]);
 
-  const handleTabsPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!tabsContainerRef.current) return;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
-    tabsPointerStartRef.current = {
-      x: e.clientX,
-      scrollLeft: tabsContainerRef.current.scrollLeft,
-    };
-    tabsHasDraggedRef.current = false;
-  };
-
-  const handleTabsPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!tabsPointerStartRef.current || !tabsContainerRef.current) return;
-    const delta = e.clientX - tabsPointerStartRef.current.x;
-    if (Math.abs(delta) > 3) {
-      tabsHasDraggedRef.current = true;
-      tabsContainerRef.current.scrollLeft = tabsPointerStartRef.current.scrollLeft - delta;
-      updateScrollIndicators();
-    }
-  };
-
-  const handleTabsPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (tabsPointerStartRef.current) {
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {}
-      tabsPointerStartRef.current = null;
-      setTimeout(() => {
-        tabsHasDraggedRef.current = false;
-      }, 50);
-    }
-  };
 
   // Media / Audio Visualizer State (Spotify Web, YouTube, etc.)
   const [mediaState, setMediaState] = useState<MediaState>({
@@ -1998,11 +1963,7 @@ export const DynamicIsland: React.FC = () => {
 
                 <div
                   ref={tabsContainerRef}
-                  onPointerDown={handleTabsPointerDown}
-                  onPointerMove={handleTabsPointerMove}
-                  onPointerUp={handleTabsPointerUp}
-                  onPointerCancel={handleTabsPointerUp}
-                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar px-0.5 py-0.5 cursor-grab active:cursor-grabbing"
+                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar px-0.5 py-0.5"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   {tabs.map((tab) => {
@@ -2012,27 +1973,24 @@ export const DynamicIsland: React.FC = () => {
                       <button
                         key={tab.id}
                         data-tab-id={tab.id}
-                        onClick={() => {
-                          if (tabsHasDraggedRef.current) return;
-                          if (isEditingNote && tab.id !== 'notes') return;
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleTabSelect(tab.id as ActiveTab);
                         }}
-                        disabled={isEditingNote && tab.id !== 'notes'}
-                        className={`relative shrink-0 inline-flex items-center justify-center px-2.5 py-1 rounded-full transition-colors select-none whitespace-nowrap ${
-                          isEditingNote && tab.id !== 'notes' ? 'opacity-40 cursor-not-allowed' : ''
-                        } ${
-                          isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-200'
+                        className={`relative shrink-0 inline-flex items-center justify-center px-2.5 py-1 rounded-full transition-colors select-none whitespace-nowrap cursor-pointer z-10 ${
+                          isActive
+                            ? 'text-white'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5 active:scale-95'
                         }`}
-                        title={isEditingNote && tab.id !== 'notes' ? 'Tutup mode edit catatan terlebih dahulu' : undefined}
                       >
                         {isActive && (
                           <motion.div
                             layoutId="active-tab-bubble"
-                            className="absolute inset-0 bg-zinc-800 rounded-full border border-zinc-700/60 shadow-sm"
+                            className="absolute inset-0 bg-zinc-800 rounded-full border border-zinc-700/60 shadow-sm pointer-events-none"
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none">
+                        <span className="relative z-10 inline-flex items-center justify-center gap-1.5 leading-none pointer-events-none">
                           <Icon className="w-3.5 h-3.5 shrink-0" />
                           <span className="font-medium text-[11px] leading-none pt-0.5">
                             {tab.label}
