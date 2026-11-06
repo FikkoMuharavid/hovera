@@ -114,6 +114,8 @@ if (-not (Test-Path $UpdateZip)) {
 # Jika berkas tanda tangan belum ada, tandatangani otomatis menggunakan kunci privat
 if (-not (Test-Path $SigFile)) {
     Write-Host "[PROSES] Menandatangani berkas paket dengan kunci privat Ed25519..." -ForegroundColor Cyan
+    Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+    Remove-Item env:\TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
     npx @tauri-apps/cli signer sign $UpdateZip -f $KeyPath --app-version $Version
 }
 
