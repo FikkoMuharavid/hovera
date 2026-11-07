@@ -1,6 +1,6 @@
 [package]
 name = "hovera"
-version = "1.0.5"
+version = "1.0.6"
 description = "Hovera - Dynamic Productivity Hub for Windows"
 authors = ["Fikko Muharavid <https://github.com/FikkoMuharavid>"]
 edition = "2024"
