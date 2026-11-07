@@ -100,6 +100,7 @@ $InstallerExe = Join-Path $NsisDir "Hovera_${Version}_x64-setup.exe"
 $ExeSigFile = Join-Path $NsisDir "Hovera_${Version}_x64-setup.exe.sig"
 $UpdateZip = Join-Path $NsisDir "Hovera_${Version}_x64-setup.nsis.zip"
 $ZipSigFile = Join-Path $NsisDir "Hovera_${Version}_x64-setup.nsis.zip.sig"
+$ZipFileName = "Hovera_${Version}_x64-setup.nsis.zip"
 
 if (-not (Test-Path $InstallerExe)) {
     Write-Host "[ERROR] Berkas installer $InstallerExe tidak ditemukan di $NsisDir" -ForegroundColor Red
