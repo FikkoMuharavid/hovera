@@ -25,11 +25,16 @@ export interface ClipboardItem {
   id: string;
   content: string;
   preview: string;
-  itemType: 'text' | 'link' | 'color' | 'code';
+  itemType: 'text' | 'link' | 'color' | 'code' | 'image';
   colorHex?: string;
   charCount: number;
   isPinned: boolean;
   timestamp: number;
+  imagePath?: string;
+  imageDataUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  imageSizeBytes?: number;
 }
 
 export interface ElectronAPI {
@@ -110,6 +115,8 @@ export interface ElectronAPI {
   onUpdateProgress?: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => () => void;
   getClipboardHistory?: () => Promise<ClipboardItem[]>;
   copyToClipboard?: (text: string) => Promise<boolean>;
+  copyClipboardItem?: (id: string) => Promise<boolean>;
+  saveClipboardImage?: (id: string) => Promise<string | null>;
   deleteClipboardItem?: (id: string) => Promise<boolean>;
   togglePinClipboardItem?: (id: string) => Promise<boolean>;
   clearClipboardHistory?: () => Promise<boolean>;

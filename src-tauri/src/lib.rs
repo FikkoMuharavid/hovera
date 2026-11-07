@@ -613,17 +613,28 @@ fn get_clipboard_history_file() -> PathBuf {
     dir.join("clipboard-history.json")
 }
 
+fn get_clipboard_images_dir() -> PathBuf {
+    let dir = get_app_data_dir().join("clipboard-images");
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipboardItem {
     pub id: String,
     pub content: String,
     pub preview: String,
-    pub item_type: String, // "text", "link", "color", "code"
+    pub item_type: String, // "text", "link", "color", "code", "image"
     pub color_hex: Option<String>,
     pub char_count: usize,
     pub is_pinned: bool,
     pub timestamp: i64,
+    pub image_path: Option<String>,
+    pub image_data_url: Option<String>,
+    pub image_width: Option<u32>,
+    pub image_height: Option<u32>,
+    pub image_size_bytes: Option<usize>,
 }
 
 static CLIPBOARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -694,6 +705,45 @@ fn save_clipboard_history(items: &[ClipboardItem]) -> bool {
     false
 }
 
+fn cleanup_unpinned_clipboard_history() {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    let mut items = load_clipboard_history();
+    let original_len = items.len();
+
+    let mut pinned_images = std::collections::HashSet::new();
+
+    items.retain(|item| {
+        if item.is_pinned {
+            if let Some(ref path_str) = item.image_path {
+                if let Some(file_name) = Path::new(path_str).file_name() {
+                    pinned_images.insert(file_name.to_string_lossy().to_string());
+                }
+            }
+            true
+        } else {
+            if let Some(ref path_str) = item.image_path {
+                let _ = fs::remove_file(path_str);
+            }
+            false
+        }
+    });
+
+    let img_dir = get_clipboard_images_dir();
+    if let Ok(entries) = fs::read_dir(&img_dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if !pinned_images.contains(name) {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    if items.len() != original_len {
+        save_clipboard_history(&items);
+    }
+}
+
 #[tauri::command]
 fn get_clipboard_history() -> Vec<ClipboardItem> {
     let _guard = CLIPBOARD_LOCK.lock().unwrap();
@@ -709,11 +759,81 @@ fn copy_to_clipboard(text: String) -> bool {
 }
 
 #[tauri::command]
+fn copy_clipboard_item(id: String) -> bool {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    let items = load_clipboard_history();
+    if let Some(item) = items.iter().find(|i| i.id == id) {
+        if item.item_type == "image" {
+            if let Some(ref path_str) = item.image_path {
+                let path = PathBuf::from(path_str);
+                if path.exists() {
+                    if let Ok(dyn_img) = image::open(&path) {
+                        let rgba = dyn_img.to_rgba8();
+                        let width = rgba.width() as usize;
+                        let height = rgba.height() as usize;
+                        let raw_bytes = rgba.into_raw();
+
+                        if let Ok(mut cb) = arboard::Clipboard::new() {
+                            let img_data = arboard::ImageData {
+                                width,
+                                height,
+                                bytes: std::borrow::Cow::Owned(raw_bytes),
+                            };
+                            return cb.set_image(img_data).is_ok();
+                        }
+                    }
+                }
+            }
+            return false;
+        } else {
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                return cb.set_text(&item.content).is_ok();
+            }
+        }
+    }
+    false
+}
+
+#[tauri::command]
+fn save_clipboard_image(id: String) -> Result<String, String> {
+    let item = {
+        let _guard = CLIPBOARD_LOCK.lock().unwrap();
+        let items = load_clipboard_history();
+        items.into_iter().find(|i| i.id == id)
+    }.ok_or("Item tidak ditemukan")?;
+
+    let src_path = item.image_path.ok_or("Tidak ada gambar untuk item ini")?;
+    let src = PathBuf::from(&src_path);
+    if !src.exists() {
+        return Err("Berkas gambar tidak ditemukan di disk".to_string());
+    }
+
+    let default_name = format!("Hovera_Capture_{}.png", item.id.replace("clip_", "").replace("img_", ""));
+    let dialog = rfd::FileDialog::new()
+        .set_title("Simpan Gambar Klip")
+        .set_file_name(&default_name)
+        .add_filter("Gambar PNG (*.png)", &["png"]);
+
+    if let Some(dest_path) = dialog.save_file() {
+        fs::copy(&src, &dest_path).map_err(|e| format!("Gagal menyimpan gambar: {}", e))?;
+        Ok(dest_path.to_string_lossy().to_string())
+    } else {
+        Err("Dibatalkan oleh pengguna".to_string())
+    }
+}
+
+#[tauri::command]
 fn delete_clipboard_item(id: String) -> bool {
     let _guard = CLIPBOARD_LOCK.lock().unwrap();
     let mut items = load_clipboard_history();
-    items.retain(|item| item.id != id);
-    save_clipboard_history(&items)
+    if let Some(pos) = items.iter().position(|item| item.id == id) {
+        let removed = items.remove(pos);
+        if let Some(ref path_str) = removed.image_path {
+            let _ = fs::remove_file(path_str);
+        }
+        return save_clipboard_history(&items);
+    }
+    false
 }
 
 #[tauri::command]
@@ -731,7 +851,35 @@ fn toggle_pin_clipboard_item(id: String) -> bool {
 fn clear_clipboard_history() -> bool {
     let _guard = CLIPBOARD_LOCK.lock().unwrap();
     let mut items = load_clipboard_history();
-    items.retain(|item| item.is_pinned);
+    let mut pinned_images = std::collections::HashSet::new();
+
+    items.retain(|item| {
+        if item.is_pinned {
+            if let Some(ref path_str) = item.image_path {
+                if let Some(file_name) = Path::new(path_str).file_name() {
+                    pinned_images.insert(file_name.to_string_lossy().to_string());
+                }
+            }
+            true
+        } else {
+            if let Some(ref path_str) = item.image_path {
+                let _ = fs::remove_file(path_str);
+            }
+            false
+        }
+    });
+
+    let img_dir = get_clipboard_images_dir();
+    if let Ok(entries) = fs::read_dir(&img_dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if !pinned_images.contains(name) {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
     save_clipboard_history(&items)
 }
 
@@ -2440,6 +2588,9 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Clean unpinned clipboard history from previous session
+            cleanup_unpinned_clipboard_history();
+
             let Some(window) = app.get_webview_window("main") else {
                 log::error!("Main window not found during setup");
                 return Ok(());
@@ -2641,25 +2792,16 @@ pub fn run() {
                         last_seq = current_seq;
 
                         if let Ok(mut cb) = arboard::Clipboard::new() {
-                            if let Ok(text) = cb.get_text() {
-                                let trimmed = text.trim();
-                                if !trimmed.is_empty() && trimmed.len() <= 500_000 {
-                                    let _guard = CLIPBOARD_LOCK.lock().unwrap();
-                                    let mut items = load_clipboard_history();
+                            let mut handled_as_image = false;
 
-                                    if items.first().map(|i| i.content.as_str()) != Some(&text) {
-                                        let mut was_pinned = false;
-                                        if let Some(pos) = items.iter().position(|i| i.content == text) {
-                                            was_pinned = items[pos].is_pinned;
-                                            items.remove(pos);
-                                        }
+                            // 1. Check if clipboard holds an image
+                            if let Ok(img) = cb.get_image() {
+                                if img.width > 0 && img.height > 0 && !img.bytes.is_empty() {
+                                    let w = img.width as u32;
+                                    let h = img.height as u32;
 
-                                        let (item_type, color_hex) = classify_clipboard_text(&text);
-                                        let preview = if trimmed.len() > 300 {
-                                            format!("{}...", &trimmed[..300])
-                                        } else {
-                                            trimmed.to_string()
-                                        };
+                                    if let Some(rgba) = image::RgbaImage::from_raw(w, h, img.bytes.into_owned()) {
+                                        let dyn_img = image::DynamicImage::ImageRgba8(rgba);
 
                                         let timestamp = std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
@@ -2671,36 +2813,158 @@ pub fn run() {
                                             .unwrap_or_default()
                                             .as_millis() % 10000;
 
-                                        let id = format!("clip_{}_{}", timestamp, millis);
+                                        let id = format!("clip_img_{}_{}", timestamp, millis);
+                                        let img_filename = format!("{}.png", id);
+                                        let img_path = get_clipboard_images_dir().join(&img_filename);
 
-                                        let char_count = trimmed.chars().count();
-                                        let new_item = ClipboardItem {
-                                            id,
-                                            content: text,
-                                            preview,
-                                            item_type,
-                                            color_hex,
-                                            char_count,
-                                            is_pinned: was_pinned,
-                                            timestamp,
-                                        };
+                                        if dyn_img.save_with_format(&img_path, image::ImageFormat::Png).is_ok() {
+                                            let file_size = fs::metadata(&img_path).map(|m| m.len() as usize).unwrap_or(0);
 
-                                        items.insert(0, new_item);
+                                            // Generate lightweight thumbnail for instant UI rendering
+                                            let thumb = dyn_img.thumbnail(360, 240);
+                                            let mut thumb_cursor = std::io::Cursor::new(Vec::new());
+                                            let data_url = if thumb.write_to(&mut thumb_cursor, image::ImageFormat::Png).is_ok() {
+                                                let b64 = general_purpose::STANDARD.encode(thumb_cursor.into_inner());
+                                                Some(format!("data:image/png;base64,{}", b64))
+                                            } else {
+                                                None
+                                            };
 
-                                        if items.len() > 60 {
-                                            let mut unpinned_count = 0;
-                                            items.retain(|item| {
-                                                if item.is_pinned {
-                                                    true
-                                                } else {
-                                                    unpinned_count += 1;
-                                                    unpinned_count <= 50
+                                            let _guard = CLIPBOARD_LOCK.lock().unwrap();
+                                            let mut items = load_clipboard_history();
+
+                                            // Check duplicate with previous top item
+                                            let is_duplicate = items.first().map(|f| {
+                                                f.item_type == "image"
+                                                    && f.image_width == Some(w)
+                                                    && f.image_height == Some(h)
+                                                    && f.image_size_bytes == Some(file_size)
+                                            }).unwrap_or(false);
+
+                                            if !is_duplicate {
+                                                let new_item = ClipboardItem {
+                                                    id: id.clone(),
+                                                    content: format!("Gambar ({} × {} px)", w, h),
+                                                    preview: format!("Gambar ({} × {} px)", w, h),
+                                                    item_type: "image".to_string(),
+                                                    color_hex: None,
+                                                    char_count: 0,
+                                                    is_pinned: false,
+                                                    timestamp,
+                                                    image_path: Some(img_path.to_string_lossy().to_string()),
+                                                    image_data_url: data_url,
+                                                    image_width: Some(w),
+                                                    image_height: Some(h),
+                                                    image_size_bytes: Some(file_size),
+                                                };
+
+                                                items.insert(0, new_item);
+
+                                                if items.len() > 60 {
+                                                    let mut unpinned_count = 0;
+                                                    items.retain(|item| {
+                                                        if item.is_pinned {
+                                                            true
+                                                        } else {
+                                                            unpinned_count += 1;
+                                                            if unpinned_count > 50 {
+                                                                if let Some(ref p) = item.image_path {
+                                                                    let _ = fs::remove_file(p);
+                                                                }
+                                                                false
+                                                            } else {
+                                                                true
+                                                            }
+                                                        }
+                                                    });
                                                 }
-                                            });
-                                        }
 
-                                        save_clipboard_history(&items);
-                                        let _ = clipboard_win.emit("clipboard-history-updated", &items);
+                                                save_clipboard_history(&items);
+                                                let _ = clipboard_win.emit("clipboard-history-updated", &items);
+                                            } else {
+                                                let _ = fs::remove_file(&img_path);
+                                            }
+                                            handled_as_image = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 2. Fallback to text if not an image
+                            if !handled_as_image {
+                                if let Ok(text) = cb.get_text() {
+                                    let trimmed = text.trim();
+                                    if !trimmed.is_empty() && trimmed.len() <= 500_000 {
+                                        let _guard = CLIPBOARD_LOCK.lock().unwrap();
+                                        let mut items = load_clipboard_history();
+
+                                        if items.first().map(|i| i.content.as_str()) != Some(&text) {
+                                            let mut was_pinned = false;
+                                            if let Some(pos) = items.iter().position(|i| i.content == text) {
+                                                was_pinned = items[pos].is_pinned;
+                                                items.remove(pos);
+                                            }
+
+                                            let (item_type, color_hex) = classify_clipboard_text(&text);
+                                            let preview = if trimmed.len() > 300 {
+                                                format!("{}...", &trimmed[..300])
+                                            } else {
+                                                trimmed.to_string()
+                                            };
+
+                                            let timestamp = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_secs() as i64;
+
+                                            let millis = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default()
+                                                .as_millis() % 10000;
+
+                                            let id = format!("clip_{}_{}", timestamp, millis);
+
+                                            let char_count = trimmed.chars().count();
+                                            let new_item = ClipboardItem {
+                                                id,
+                                                content: text,
+                                                preview,
+                                                item_type,
+                                                color_hex,
+                                                char_count,
+                                                is_pinned: was_pinned,
+                                                timestamp,
+                                                image_path: None,
+                                                image_data_url: None,
+                                                image_width: None,
+                                                image_height: None,
+                                                image_size_bytes: None,
+                                            };
+
+                                            items.insert(0, new_item);
+
+                                            if items.len() > 60 {
+                                                let mut unpinned_count = 0;
+                                                items.retain(|item| {
+                                                    if item.is_pinned {
+                                                        true
+                                                    } else {
+                                                        unpinned_count += 1;
+                                                        if unpinned_count > 50 {
+                                                            if let Some(ref p) = item.image_path {
+                                                                let _ = fs::remove_file(p);
+                                                            }
+                                                            false
+                                                        } else {
+                                                            true
+                                                        }
+                                                    }
+                                                });
+                                            }
+
+                                            save_clipboard_history(&items);
+                                            let _ = clipboard_win.emit("clipboard-history-updated", &items);
+                                        }
                                     }
                                 }
                             }
@@ -2826,12 +3090,24 @@ pub fn run() {
             hovera_install_update,
             get_clipboard_history,
             copy_to_clipboard,
+            copy_clipboard_item,
+            save_clipboard_image,
             delete_clipboard_item,
             toggle_pin_clipboard_item,
             clear_clipboard_history
         ]);
 
-    if let Err(err) = app_builder.run(tauri::generate_context!()) {
-        log::error!("Error while running hovera tauri application: {err}");
-    }
+    let app = match app_builder.build(tauri::generate_context!()) {
+        Ok(a) => a,
+        Err(err) => {
+            log::error!("Error while building hovera tauri application: {err}");
+            return;
+        }
+    };
+
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            cleanup_unpinned_clipboard_history();
+        }
+    });
 }

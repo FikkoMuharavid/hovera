@@ -264,6 +264,20 @@ export function initTauriBridge(): void {
         return false;
       }
     },
+    copyClipboardItem: async (id: string) => {
+      try {
+        return await invoke<boolean>('copy_clipboard_item', { id });
+      } catch {
+        return false;
+      }
+    },
+    saveClipboardImage: async (id: string) => {
+      try {
+        return await invoke<string>('save_clipboard_image', { id });
+      } catch {
+        return null;
+      }
+    },
     deleteClipboardItem: async (id: string) => {
       try {
         return await invoke<boolean>('delete_clipboard_item', { id });
