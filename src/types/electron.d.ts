@@ -21,6 +21,17 @@ export interface UpdateInfo {
   pubDate?: string;
 }
 
+export interface ClipboardItem {
+  id: string;
+  content: string;
+  preview: string;
+  itemType: 'text' | 'link' | 'color' | 'code';
+  colorHex?: string;
+  charCount: number;
+  isPinned: boolean;
+  timestamp: number;
+}
+
 export interface ElectronAPI {
   setIgnoreMouseEvents: (ignore: boolean) => void;
   openExternal: (url: string) => Promise<boolean>;
@@ -97,6 +108,12 @@ export interface ElectronAPI {
   checkForUpdates?: () => Promise<UpdateInfo>;
   installAppUpdate?: () => Promise<{ success: boolean; error?: string }>;
   onUpdateProgress?: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => () => void;
+  getClipboardHistory?: () => Promise<ClipboardItem[]>;
+  copyToClipboard?: (text: string) => Promise<boolean>;
+  deleteClipboardItem?: (id: string) => Promise<boolean>;
+  togglePinClipboardItem?: (id: string) => Promise<boolean>;
+  clearClipboardHistory?: () => Promise<boolean>;
+  onClipboardUpdated?: (callback: (items: ClipboardItem[]) => void) => () => void;
 }
 
 declare global {

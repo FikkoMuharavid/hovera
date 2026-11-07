@@ -17,12 +17,14 @@ import {
   DownloadCloud,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CompactView } from './CompactView';
 import { TimeHubWidget } from './TimeHubWidget';
 import { TodoWidget } from './TodoWidget';
 import { NotesWidget, type MeetingNote } from './NotesWidget';
+import { ClipboardWidget } from './ClipboardWidget';
 import { ShortcutsWidget } from './ShortcutsWidget';
 import { HealthWidget } from './HealthWidget';
 import { SettingsWidget } from './SettingsWidget';
@@ -35,7 +37,7 @@ import { fetchLyrics, getActiveLyric, type LyricLine } from '../utils/lyricsServ
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import type { MediaState } from '../types/electron';
 
-type ActiveTab = 'clock' | 'todo' | 'notes' | 'shortcuts' | 'tools' | 'health' | 'settings' | 'downloader';
+type ActiveTab = 'clock' | 'todo' | 'notes' | 'clipboard' | 'shortcuts' | 'tools' | 'health' | 'settings' | 'downloader';
 export type DisplayStyle = 'floating' | 'top-notch';
 
 export const DynamicIsland: React.FC = () => {
@@ -83,8 +85,8 @@ export const DynamicIsland: React.FC = () => {
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
     const maxScroll = Math.max(0, scrollWidth - clientWidth);
-    setCanScrollLeft(scrollLeft > 4);
-    setCanScrollRight(maxScroll > 0 && (maxScroll - scrollLeft) > 6);
+    setCanScrollLeft(scrollLeft > 6);
+    setCanScrollRight(maxScroll > 10 && (maxScroll - scrollLeft) > 14);
   }, []);
 
   useEffect(() => {
@@ -1779,6 +1781,7 @@ export const DynamicIsland: React.FC = () => {
         badge: notes.length > 0 ? notes.length : undefined,
         activeIndicator: isRecording,
       },
+      { id: 'clipboard', label: 'Klip', icon: ClipboardList },
       { id: 'shortcuts', label: 'Pintasan', icon: LayoutGrid },
       { id: 'tools', label: 'Alat', icon: SlidersHorizontal },
       {
@@ -1975,7 +1978,7 @@ export const DynamicIsland: React.FC = () => {
 
                 <div
                   ref={tabsContainerRef}
-                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar pl-1 pr-3 py-0.5"
+                  className="flex items-center gap-1 sm:gap-1.5 w-full overflow-x-auto no-scrollbar px-1.5 py-0.5"
                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                   {tabs.map((tab) => {
@@ -2261,6 +2264,7 @@ export const DynamicIsland: React.FC = () => {
                       isTranscribing={isTranscribing}
                     />
                   )}
+                  {activeTab === 'clipboard' && <ClipboardWidget key="clipboard" />}
                   {activeTab === 'shortcuts' && <ShortcutsWidget key="shortcuts" />}
                   {activeTab === 'tools' && (
                     <FileToolsWidget

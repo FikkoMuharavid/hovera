@@ -250,6 +250,58 @@ export function initTauriBridge(): void {
         if (unlisten) unlisten();
       };
     },
+    getClipboardHistory: async () => {
+      try {
+        return await invoke<any>('get_clipboard_history');
+      } catch {
+        return [];
+      }
+    },
+    copyToClipboard: async (text: string) => {
+      try {
+        return await invoke<boolean>('copy_to_clipboard', { text });
+      } catch {
+        return false;
+      }
+    },
+    deleteClipboardItem: async (id: string) => {
+      try {
+        return await invoke<boolean>('delete_clipboard_item', { id });
+      } catch {
+        return false;
+      }
+    },
+    togglePinClipboardItem: async (id: string) => {
+      try {
+        return await invoke<boolean>('toggle_pin_clipboard_item', { id });
+      } catch {
+        return false;
+      }
+    },
+    clearClipboardHistory: async () => {
+      try {
+        return await invoke<boolean>('clear_clipboard_history');
+      } catch {
+        return false;
+      }
+    },
+    onClipboardUpdated: (callback) => {
+      let isCancelled = false;
+      let unlisten: (() => void) | null = null;
+      listen('clipboard-history-updated', (event: any) => {
+        callback(event.payload);
+      }).then((un) => {
+        if (isCancelled) {
+          un();
+        } else {
+          unlisten = un;
+        }
+      }).catch(() => {});
+      return () => {
+        isCancelled = true;
+        if (unlisten) unlisten();
+      };
+    },
     isElectron: false,
   };
 

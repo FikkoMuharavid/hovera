@@ -606,6 +606,135 @@ fn atomic_write_file(path: &Path, content: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+
+fn get_clipboard_history_file() -> PathBuf {
+    let dir = get_app_data_dir();
+    let _ = fs::create_dir_all(&dir);
+    dir.join("clipboard-history.json")
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ClipboardItem {
+    pub id: String,
+    pub content: String,
+    pub preview: String,
+    pub item_type: String, // "text", "link", "color", "code"
+    pub color_hex: Option<String>,
+    pub char_count: usize,
+    pub is_pinned: bool,
+    pub timestamp: i64,
+}
+
+static CLIPBOARD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(windows)]
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn GetClipboardSequenceNumber() -> u32;
+}
+
+fn classify_clipboard_text(text: &str) -> (String, Option<String>) {
+    let trimmed = text.trim();
+    // 1. Color check (HEX: #FFF, #FFFFFF, #FFFFFFFF or rgb/rgba)
+    let is_hex_color = (trimmed.len() == 4 || trimmed.len() == 7 || trimmed.len() == 9)
+        && trimmed.starts_with('#')
+        && trimmed[1..].chars().all(|c| c.is_ascii_hexdigit());
+
+    if is_hex_color {
+        return ("color".to_string(), Some(trimmed.to_string()));
+    }
+
+    if trimmed.starts_with("rgb(") || trimmed.starts_with("rgba(") {
+        return ("color".to_string(), Some(trimmed.to_string()));
+    }
+
+    // 2. Link check
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return ("link".to_string(), None);
+    }
+
+    // 3. Code snippet check
+    let has_newlines = trimmed.contains('\n');
+    let has_code_tokens = trimmed.contains('{') && trimmed.contains('}')
+        || trimmed.contains("const ")
+        || trimmed.contains("let ")
+        || trimmed.contains("function ")
+        || trimmed.contains("def ")
+        || trimmed.contains("import ")
+        || trimmed.contains("class ")
+        || trimmed.contains("SELECT ")
+        || trimmed.contains("</div>")
+        || trimmed.contains("=>");
+
+    if has_newlines && has_code_tokens {
+        return ("code".to_string(), None);
+    }
+
+    ("text".to_string(), None)
+}
+
+fn load_clipboard_history() -> Vec<ClipboardItem> {
+    let file = get_clipboard_history_file();
+    if file.exists() {
+        if let Ok(content) = fs::read_to_string(&file) {
+            if let Ok(items) = serde_json::from_str::<Vec<ClipboardItem>>(&content) {
+                return items;
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn save_clipboard_history(items: &[ClipboardItem]) -> bool {
+    let file = get_clipboard_history_file();
+    if let Ok(json) = serde_json::to_string_pretty(items) {
+        return atomic_write_file(&file, &json).is_ok();
+    }
+    false
+}
+
+#[tauri::command]
+fn get_clipboard_history() -> Vec<ClipboardItem> {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    load_clipboard_history()
+}
+
+#[tauri::command]
+fn copy_to_clipboard(text: String) -> bool {
+    if let Ok(mut cb) = arboard::Clipboard::new() {
+        return cb.set_text(text).is_ok();
+    }
+    false
+}
+
+#[tauri::command]
+fn delete_clipboard_item(id: String) -> bool {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    let mut items = load_clipboard_history();
+    items.retain(|item| item.id != id);
+    save_clipboard_history(&items)
+}
+
+#[tauri::command]
+fn toggle_pin_clipboard_item(id: String) -> bool {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    let mut items = load_clipboard_history();
+    if let Some(item) = items.iter_mut().find(|i| i.id == id) {
+        item.is_pinned = !item.is_pinned;
+        return save_clipboard_history(&items);
+    }
+    false
+}
+
+#[tauri::command]
+fn clear_clipboard_history() -> bool {
+    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+    let mut items = load_clipboard_history();
+    items.retain(|item| item.is_pinned);
+    save_clipboard_history(&items)
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 struct SavedPosition {
     x: i32,
@@ -2492,6 +2621,94 @@ pub fn run() {
                 }
             });
 
+            // Background Clipboard History Watcher (Zero CPU polling via OS sequence number)
+            let clipboard_win = window.clone();
+            std::thread::spawn(move || {
+                #[cfg(windows)]
+                let mut last_seq: u32 = unsafe { GetClipboardSequenceNumber() };
+                #[cfg(not(windows))]
+                let mut last_seq: u32 = 0;
+
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(350));
+
+                    #[cfg(windows)]
+                    let current_seq = unsafe { GetClipboardSequenceNumber() };
+                    #[cfg(not(windows))]
+                    let current_seq = last_seq;
+
+                    if current_seq != last_seq {
+                        last_seq = current_seq;
+
+                        if let Ok(mut cb) = arboard::Clipboard::new() {
+                            if let Ok(text) = cb.get_text() {
+                                let trimmed = text.trim();
+                                if !trimmed.is_empty() && trimmed.len() <= 500_000 {
+                                    let _guard = CLIPBOARD_LOCK.lock().unwrap();
+                                    let mut items = load_clipboard_history();
+
+                                    if items.first().map(|i| i.content.as_str()) != Some(&text) {
+                                        let mut was_pinned = false;
+                                        if let Some(pos) = items.iter().position(|i| i.content == text) {
+                                            was_pinned = items[pos].is_pinned;
+                                            items.remove(pos);
+                                        }
+
+                                        let (item_type, color_hex) = classify_clipboard_text(&text);
+                                        let preview = if trimmed.len() > 300 {
+                                            format!("{}...", &trimmed[..300])
+                                        } else {
+                                            trimmed.to_string()
+                                        };
+
+                                        let timestamp = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs() as i64;
+
+                                        let millis = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_millis() % 10000;
+
+                                        let id = format!("clip_{}_{}", timestamp, millis);
+
+                                        let char_count = trimmed.chars().count();
+                                        let new_item = ClipboardItem {
+                                            id,
+                                            content: text,
+                                            preview,
+                                            item_type,
+                                            color_hex,
+                                            char_count,
+                                            is_pinned: was_pinned,
+                                            timestamp,
+                                        };
+
+                                        items.insert(0, new_item);
+
+                                        if items.len() > 60 {
+                                            let mut unpinned_count = 0;
+                                            items.retain(|item| {
+                                                if item.is_pinned {
+                                                    true
+                                                } else {
+                                                    unpinned_count += 1;
+                                                    unpinned_count <= 50
+                                                }
+                                            });
+                                        }
+
+                                        save_clipboard_history(&items);
+                                        let _ = clipboard_win.emit("clipboard-history-updated", &items);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
             // Background Media & Audio Peak Watcher (ultra-low CPU < 0.1% idle)
             let media_win = window.clone();
             std::thread::spawn(move || {
@@ -2606,7 +2823,12 @@ pub fn run() {
             download_batch_media,
             fetch_url_text,
             hovera_check_updates,
-            hovera_install_update
+            hovera_install_update,
+            get_clipboard_history,
+            copy_to_clipboard,
+            delete_clipboard_item,
+            toggle_pin_clipboard_item,
+            clear_clipboard_history
         ]);
 
     if let Err(err) = app_builder.run(tauri::generate_context!()) {
