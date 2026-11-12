@@ -5,7 +5,6 @@ import { ClockWidget } from './ClockWidget';
 import { TimerWidget } from './TimerWidget';
 import { StopwatchWidget, type LapRecord } from './StopwatchWidget';
 import { AnniversaryWidget } from './AnniversaryWidget';
-import { getAnniversaryCalculations } from '../utils/anniversary';
 import { sound } from '../utils/sound';
 
 export type TimeSubTab = 'clock' | 'timer' | 'stopwatch' | 'anniv';
@@ -38,6 +37,10 @@ interface TimeHubWidgetProps {
   onAnnivDateChange?: (day: number, month: number, year: number) => void;
   showAlwaysInCompact?: boolean;
   onToggleShowAlways?: () => void;
+  /** Ada pengingat untuk hari ini (sebelum disembunyikan user). */
+  hasAnnivReminder?: boolean;
+  annivDismissedToday?: boolean;
+  onToggleAnnivDismissToday?: () => void;
 }
 
 export const TimeHubWidget = React.memo<TimeHubWidgetProps>(({
@@ -63,10 +66,11 @@ export const TimeHubWidget = React.memo<TimeHubWidgetProps>(({
   onAnnivDateChange,
   showAlwaysInCompact = false,
   onToggleShowAlways,
+  hasAnnivReminder = false,
+  annivDismissedToday = false,
+  onToggleAnnivDismissToday,
 }) => {
   const [subTab, setSubTab] = useState<TimeSubTab>(initialSubTab);
-
-  const annivCalc = getAnniversaryCalculations(startYear, startMonth, startDay);
 
   const handleSubTabChange = (tab: TimeSubTab) => {
     sound.playClick();
@@ -130,12 +134,9 @@ export const TimeHubWidget = React.memo<TimeHubWidgetProps>(({
           >
             <Heart className="w-3 h-3 fill-current text-pink-400" />
             <span>Anniv</span>
-            {annivEnabled &&
-              (annivCalc.isAnnivToday ||
-                annivCalc.isMensiveToday ||
-                annivCalc.isMensiveApproaching) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-pulse" />
-              )}
+            {hasAnnivReminder && !annivDismissedToday && (
+              <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+            )}
           </button>
         </div>
       </div>
@@ -190,6 +191,9 @@ export const TimeHubWidget = React.memo<TimeHubWidgetProps>(({
               onDateChange={onAnnivDateChange}
               showAlwaysInCompact={showAlwaysInCompact}
               onToggleShowAlways={onToggleShowAlways}
+              hasReminderToday={hasAnnivReminder}
+              dismissedToday={annivDismissedToday}
+              onToggleDismissToday={onToggleAnnivDismissToday}
             />
           )}
         </AnimatePresence>

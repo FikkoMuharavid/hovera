@@ -1,16 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import {
-  Heart,
-  Sparkles,
-  CalendarHeart,
-  Gift,
-  Clock,
-  Check,
-  Edit2,
-  Settings,
-  Power,
-} from 'lucide-react';
+import { Heart, Bell, BellOff, Settings2, Power } from 'lucide-react';
 import { getAnniversaryCalculations } from '../utils/anniversary';
 import { sound } from '../utils/sound';
 
@@ -23,6 +13,10 @@ interface AnniversaryWidgetProps {
   onDateChange?: (day: number, month: number, year: number) => void;
   showAlwaysInCompact?: boolean;
   onToggleShowAlways?: () => void;
+  /** Ada pengingat di kapsul untuk hari ini (sebelum disembunyikan). */
+  hasReminderToday?: boolean;
+  dismissedToday?: boolean;
+  onToggleDismissToday?: () => void;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -30,6 +24,16 @@ const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
+
+const fadeIn = {
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -4 },
+  transition: { duration: 0.16 },
+};
+
+const fieldClass =
+  'h-8 bg-zinc-950 border border-zinc-800 rounded-lg px-2 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600';
 
 export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
   annivEnabled = false,
@@ -40,12 +44,14 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
   onDateChange,
   showAlwaysInCompact = false,
   onToggleShowAlways,
+  hasReminderToday = false,
+  dismissedToday = false,
+  onToggleDismissToday,
 }) => {
-  const [isConfiguring, setIsConfiguring] = useState(!annivEnabled);
+  const [isConfiguring, setIsConfiguring] = useState(false);
   const [tempDay, setTempDay] = useState(startDay);
   const [tempMonth, setTempMonth] = useState(startMonth);
   const [tempYear, setTempYear] = useState(startYear);
-
   const [notes, setNotes] = useState(() => {
     try {
       return localStorage.getItem('di_anniv_notes') || '';
@@ -53,22 +59,21 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
       return '';
     }
   });
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [tempNotes, setTempNotes] = useState(notes);
-  const [celebrated, setCelebrated] = useState(false);
-  const celebrateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  React.useEffect(() => {
-    return () => {
-      if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current);
-    };
-  }, []);
 
   const calc = getAnniversaryCalculations(startYear, startMonth, startDay);
 
+  const openConfig = () => {
+    sound.playClick();
+    setTempDay(startDay);
+    setTempMonth(startMonth);
+    setTempYear(startYear);
+    setIsConfiguring(true);
+  };
+
   const handleSaveDateConfig = () => {
     sound.playSuccess();
-    onDateChange?.(tempDay, tempMonth, tempYear);
+    const year = Math.min(CURRENT_YEAR, Math.max(1970, tempYear || CURRENT_YEAR));
+    onDateChange?.(tempDay, tempMonth, year);
     onToggleAnnivEnabled?.(true);
     setIsConfiguring(false);
   };
@@ -79,95 +84,52 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
     setIsConfiguring(false);
   };
 
-  const handleSaveNotes = () => {
-    sound.playClick();
-    setNotes(tempNotes);
+  const saveNotes = () => {
     try {
-      localStorage.setItem('di_anniv_notes', tempNotes);
+      localStorage.setItem('di_anniv_notes', notes.trim());
     } catch {}
-    setIsEditingNotes(false);
   };
 
-  const triggerCelebrate = () => {
-    sound.playSuccess();
-    setCelebrated(true);
-    if (celebrateTimeoutRef.current) clearTimeout(celebrateTimeoutRef.current);
-    celebrateTimeoutRef.current = setTimeout(() => setCelebrated(false), 2500);
-  };
-
-  // 1. TAMPILAN JIKA BELUM DIAKTIFKAN
+  // 1. Belum diaktifkan
   if (!annivEnabled && !isConfiguring) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.2 }}
-        className="flex flex-col items-center justify-center py-6 px-4 text-center my-auto h-full w-full select-none"
+        {...fadeIn}
+        className="flex flex-col items-center justify-center h-full w-full px-6 text-center select-none"
       >
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-500/20 to-rose-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 mb-3 shadow-lg">
-          <Heart className="w-6 h-6 fill-current animate-pulse text-pink-400" />
-        </div>
-        <h3 className="text-sm font-semibold text-white">Pengingat Anniversary & Mensive</h3>
-        <p className="text-[11px] text-zinc-400 max-w-[320px] mt-1 mb-4 leading-relaxed">
-          Rayakan momen indah bersama pasangan. Atur tanggal jadian atau pernikahan Anda untuk melacak total hari bersama dan pengingat mensive bulanan otomatis.
+        <Heart className="w-5 h-5 text-rose-400 mb-3" />
+        <h3 className="text-[13px] font-medium text-zinc-100">Mensive & Anniversary</h3>
+        <p className="text-[11px] text-zinc-500 max-w-[300px] mt-1 mb-4 leading-relaxed">
+          Isi tanggal jadian atau pernikahan. Hovera menghitung hari bersama dan mengingatkan
+          setiap tanggal itu tiba.
         </p>
         <button
           type="button"
-          onClick={() => {
-            sound.playClick();
-            setTempDay(startDay);
-            setTempMonth(startMonth);
-            setTempYear(startYear);
-            setIsConfiguring(true);
-          }}
-          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white text-xs font-semibold shadow-md active:scale-95 transition-all cursor-pointer"
+          onClick={openConfig}
+          className="h-8 px-4 rounded-lg bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium transition-colors cursor-pointer"
         >
-          <CalendarHeart className="w-4 h-4" />
-          <span>+ Atur Tanggal Spesial</span>
+          Atur tanggal
         </button>
       </motion.div>
     );
   }
 
-  // 2. FORM PENGATURAN TANGGAL
+  // 2. Form tanggal
   if (isConfiguring) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.98 }}
-        transition={{ duration: 0.15 }}
-        className="flex flex-col space-y-3 h-full w-full py-1 text-white select-none overflow-y-auto no-scrollbar"
-      >
-        <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-          <div className="flex items-center space-x-2">
-            <div className="p-1 rounded-lg bg-pink-500/20 text-pink-400">
-              <CalendarHeart className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-xs font-semibold text-pink-200">Pengaturan Tanggal Spesial</span>
-              <span className="text-[10px] text-zinc-400 block">Pilih tanggal jadian atau pernikahan Anda</span>
-            </div>
-          </div>
-          {annivEnabled && (
-            <button
-              onClick={() => setIsConfiguring(false)}
-              className="text-[10px] text-zinc-400 hover:text-white px-2 py-0.5 rounded-lg hover:bg-zinc-800 transition-colors"
-            >
-              Kembali
-            </button>
-          )}
+      <motion.div {...fadeIn} className="flex flex-col h-full w-full gap-3 text-white select-none">
+        <div>
+          <div className="text-[12px] font-medium text-zinc-100">Tanggal spesial</div>
+          <div className="text-[10.5px] text-zinc-500">Tanggal jadian atau pernikahan</div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 p-3 rounded-2xl bg-zinc-900/80 border border-zinc-800">
-          {/* Pilihan Tanggal */}
-          <div className="flex flex-col space-y-1">
-            <label className="text-[10px] text-zinc-400 font-medium">Tanggal (Hari)</label>
+        <div className="grid grid-cols-[72px_1fr_88px] gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500">Tanggal</span>
             <select
               value={tempDay}
               onChange={(e) => setTempDay(Number(e.target.value))}
-              className="bg-black border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-pink-500 font-mono"
+              className={`${fieldClass} tabular-nums`}
             >
               {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                 <option key={d} value={d}>
@@ -175,15 +137,13 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Pilihan Bulan */}
-          <div className="flex flex-col space-y-1">
-            <label className="text-[10px] text-zinc-400 font-medium">Bulan</label>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500">Bulan</span>
             <select
               value={tempMonth}
               onChange={(e) => setTempMonth(Number(e.target.value))}
-              className="bg-black border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-pink-500"
+              className={fieldClass}
             >
               {MONTH_NAMES.map((name, idx) => (
                 <option key={name} value={idx}>
@@ -191,58 +151,53 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Pilihan Tahun */}
-          <div className="flex flex-col space-y-1">
-            <label className="text-[10px] text-zinc-400 font-medium">Tahun</label>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500">Tahun</span>
             <input
               type="number"
-              min="1970"
+              min={1970}
               max={CURRENT_YEAR}
               value={tempYear}
               onChange={(e) => setTempYear(Number(e.target.value))}
-              className="bg-black border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-pink-500 font-mono text-center"
+              className={`${fieldClass} tabular-nums`}
             />
-          </div>
+          </label>
         </div>
 
-        <div className="p-2.5 rounded-xl bg-pink-500/10 border border-pink-500/20 text-[10.5px] text-pink-300 flex items-start space-x-2">
-          <Sparkles className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
-          <span>
-            <strong>Otomatis:</strong> Sistem akan menghitung pengingat <strong>Mensive tiap tanggal {tempDay}</strong> setiap bulan dan <strong>Anniversary tahunan tiap {tempDay} {MONTH_NAMES[tempMonth]}</strong>.
-          </span>
-        </div>
+        <p className="text-[10.5px] text-zinc-500 leading-relaxed">
+          Mensive setiap tanggal {tempDay}
+          {tempDay > 28 ? ' (atau hari terakhir di bulan yang lebih pendek)' : ''}, anniversary setiap{' '}
+          {tempDay} {MONTH_NAMES[tempMonth]}.
+        </p>
 
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between mt-auto pb-1">
           {annivEnabled ? (
             <button
               type="button"
               onClick={handleDisableAnniv}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[10px] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] text-zinc-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
             >
-              <Power className="w-3 h-3" />
-              <span>Matikan Pengingat</span>
+              <Power className="w-3.5 h-3.5" />
+              Matikan fitur
             </button>
-          ) : <div />}
-
-          <div className="flex items-center space-x-2">
-            {annivEnabled && (
-              <button
-                type="button"
-                onClick={() => setIsConfiguring(false)}
-                className="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-            )}
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsConfiguring(false)}
+              className="h-8 px-3 rounded-lg text-xs text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
             <button
               type="button"
               onClick={handleSaveDateConfig}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-semibold shadow-md active:scale-95 transition-all cursor-pointer"
+              className="h-8 px-4 rounded-lg bg-rose-500 hover:bg-rose-400 text-white text-xs font-medium transition-colors cursor-pointer"
             >
-              <Check className="w-3.5 h-3.5" />
-              <span>Simpan & Aktifkan</span>
+              Simpan
             </button>
           </div>
         </div>
@@ -250,224 +205,147 @@ export const AnniversaryWidget: React.FC<AnniversaryWidgetProps> = ({
     );
   }
 
-  // 3. TAMPILAN DASHBOARD AKTIF
+  // 3. Dashboard
+  // Anniversary selalu jatuh di tanggal mensive, jadi angka utama = acara berikutnya.
+  const nextIsAnniv = calc.daysUntilAnniv === calc.daysUntilMensive;
+  const isToday = calc.daysUntilMensive === 0;
+  const mainLabel = nextIsAnniv
+    ? `Anniversary ke-${calc.nextAnnivNumber}`
+    : `Mensive ke-${calc.nextMensiveNumber}`;
+  const togetherText = [
+    calc.yearsTogether > 0 ? `${calc.yearsTogether} thn` : '',
+    `${calc.remainingMonths} bln`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.2 }}
-      className="flex flex-col space-y-2 h-full w-full py-0.5 pb-2 select-none text-white overflow-y-auto no-scrollbar"
+      {...fadeIn}
+      className="flex flex-col h-full w-full gap-2 pb-2 text-white select-none overflow-y-auto no-scrollbar"
     >
-      {/* Top Banner Status */}
-      <div className="flex items-center justify-between px-3 py-1.5 rounded-2xl bg-gradient-to-r from-pink-500/15 via-rose-500/10 to-purple-500/15 border border-pink-500/25">
-        <div className="flex items-center space-x-2">
-          <div className="p-1 rounded-xl bg-pink-500/20 text-pink-400">
-            <Heart className="w-3.5 h-3.5 fill-current animate-pulse text-rose-400" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-1.5">
-              <span className="text-xs font-semibold text-pink-200 tracking-tight">
-                Anniversary & Mensive
-              </span>
-              <span className="text-[10px] text-zinc-400">· {startDay} {MONTH_NAMES[startMonth]}</span>
-            </div>
-            <p className="text-[10px] text-zinc-300">
-              {calc.isAnnivToday
-                ? 'Selamat Hari Anniversary Tahunan!'
-                : calc.isMensiveToday
-                ? 'Hari ini Mensive! Rayakan momen indahmu'
-                : calc.isAnnivApproaching
-                ? `H-${calc.daysUntilAnniv} Menuju Anniversary ${startDay} ${MONTH_NAMES[startMonth]}!`
-                : calc.isMensiveApproaching
-                ? `H-${calc.daysUntilMensive} Menuju Mensive (${calc.nextMensiveFormatted})`
-                : `${calc.daysUntilMensive} hari menuju mensive berikutnya (${calc.nextMensiveFormatted})`}
-            </p>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="min-w-0">
+          <div className="text-[12px] font-medium text-zinc-100">Mensive & Anniversary</div>
+          <div className="text-[10.5px] text-zinc-500 tabular-nums">
+            Sejak {startDay} {MONTH_NAMES[startMonth]} {startYear}
           </div>
         </div>
-
-        <div className="flex items-center space-x-1.5">
-          <button
-            onClick={() => {
-              sound.playClick();
-              setTempDay(startDay);
-              setTempMonth(startMonth);
-              setTempYear(startYear);
-              setIsConfiguring(true);
-            }}
-            className="p-1.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
-            title="Ubah Tanggal Spesial"
-          >
-            <Settings className="w-3 h-3" />
-          </button>
-
-          <button
-            onClick={triggerCelebrate}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium transition-all cursor-pointer ${
-              celebrated
-                ? 'bg-pink-500 text-white scale-105 shadow-md'
-                : 'bg-zinc-800/80 hover:bg-zinc-700/80 text-pink-300 border border-pink-500/30'
-            }`}
-            title="Kirim Cinta"
-          >
-            {celebrated ? (
-              <Heart className="w-3 h-3 fill-current text-white animate-bounce" />
-            ) : (
-              <Sparkles className="w-3 h-3 text-pink-400" />
-            )}
-            <span>{celebrated ? 'Terkirim!' : 'Love'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 3 Metric Cards */}
-      <div className="grid grid-cols-3 gap-2 my-1.5">
-        {/* Card 1: Mensive Bulanan */}
-        <div className="flex flex-col justify-between p-2 rounded-xl bg-zinc-900/70 border border-zinc-800/80">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[9.5px] font-medium">Mensive Bulanan</span>
-            <Clock className="w-3 h-3 text-rose-400" />
-          </div>
-          <div className="my-0.5">
-            <div className="text-sm font-bold font-mono text-rose-200">
-              {calc.isMensiveToday ? 'HARI INI' : `${calc.daysUntilMensive} Hari`}
-            </div>
-            <div className="text-[9px] text-zinc-400 truncate">
-              {calc.isMensiveToday ? `Tgl ${startDay} Tiap Bulan` : `Ke ${calc.nextMensiveFormatted}`}
-            </div>
-          </div>
-          <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-            <div
-              className="bg-rose-500 h-full rounded-full transition-all duration-500"
-              style={{
-                width: calc.isMensiveToday
-                  ? '100%'
-                  : `${Math.max(8, Math.min(100, ((30 - calc.daysUntilMensive) / 30) * 100))}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Card 2: Anniversary Tahunan */}
-        <div className="flex flex-col justify-between p-2 rounded-xl bg-zinc-900/70 border border-zinc-800/80">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[9.5px] font-medium">Anniversary</span>
-            <Gift className="w-3 h-3 text-pink-400" />
-          </div>
-          <div className="my-0.5">
-            <div className="text-sm font-bold font-mono text-pink-200">
-              {calc.isAnnivToday ? 'HARI INI' : `${calc.daysUntilAnniv} Hari`}
-            </div>
-            <div className="text-[9px] text-zinc-400 truncate">
-              {calc.isAnnivToday ? `${startDay} ${MONTH_NAMES[startMonth]}` : `Ke ${calc.nextAnnivFormatted}`}
-            </div>
-          </div>
-          <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-pink-500 to-purple-500 h-full rounded-full transition-all duration-500"
-              style={{
-                width: calc.isAnnivToday
-                  ? '100%'
-                  : `${Math.max(5, Math.min(100, ((365 - calc.daysUntilAnniv) / 365) * 100))}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Card 3: Total Hari Bersama */}
-        <div className="flex flex-col justify-between p-2 rounded-xl bg-zinc-900/70 border border-zinc-800/80">
-          <div className="flex items-center justify-between text-zinc-400">
-            <span className="text-[9.5px] font-medium">Hari Bersama</span>
-            <CalendarHeart className="w-3 h-3 text-purple-400" />
-          </div>
-          <div className="my-0.5">
-            <div className="text-sm font-bold font-mono text-purple-200">
-              {calc.totalDaysTogether.toLocaleString('id-ID')} Hari
-            </div>
-            <div className="text-[9px] text-zinc-400 truncate">
-              {calc.yearsTogether > 0 ? `${calc.yearsTogether} thn ` : ''}
-              {calc.remainingMonths} bln bersama
-            </div>
-          </div>
-          <div className="flex items-center justify-between pt-0.5 text-[8.5px] text-zinc-500">
-            <span>Sejak {startDay} {MONTH_NAMES[startMonth].slice(0, 3)} {startYear}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          {hasReminderToday && (
             <button
+              type="button"
               onClick={() => {
                 sound.playClick();
-                setTempDay(startDay);
-                setTempMonth(startMonth);
-                setTempYear(startYear);
-                setIsConfiguring(true);
+                onToggleDismissToday?.();
               }}
-              className="text-zinc-400 hover:text-white"
-              title="Ubah tanggal jadian"
+              className={`flex items-center gap-1.5 h-7 px-2.5 rounded-lg border text-[10.5px] transition-colors cursor-pointer ${
+                dismissedToday
+                  ? 'border-zinc-800 text-zinc-500 hover:text-zinc-200'
+                  : 'border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+              }`}
+              title={
+                dismissedToday
+                  ? 'Tampilkan lagi pengingat di kapsul'
+                  : 'Sembunyikan pengingat di kapsul sampai besok'
+              }
             >
-              <Edit2 className="w-2.5 h-2.5" />
+              {dismissedToday ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
+              {dismissedToday ? 'Tampilkan lagi' : 'Matikan hari ini'}
             </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={openConfig}
+            className="flex items-center justify-center w-7 h-7 rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="Ubah tanggal"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
-      {/* Love Note & Settings Row */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-[10px]">
-        {/* Left: Gift / Love Note */}
-        <div className="flex-1 flex items-center space-x-1.5 overflow-hidden">
-          <Gift className="w-3 h-3 text-pink-400 shrink-0" />
-          {isEditingNotes ? (
-            <div className="flex-1 flex items-center space-x-1">
-              <input
-                type="text"
-                value={tempNotes}
-                onChange={(e) => setTempNotes(e.target.value)}
-                placeholder={`Rencana kado / ucapan tgl ${startDay}...`}
-                className="w-full px-1.5 py-0.5 bg-black border border-zinc-700 rounded text-[10px] text-white focus:outline-none focus:border-pink-500"
-              />
-              <button
-                onClick={handleSaveNotes}
-                className="p-1 bg-pink-600 hover:bg-pink-500 rounded text-white"
-              >
-                <Check className="w-2.5 h-2.5" />
-              </button>
-            </div>
+      {/* Ringkasan */}
+      <div className="grid grid-cols-[1.15fr_1fr] rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+        <div className="flex flex-col justify-center px-4 py-3">
+          <div className="text-[10.5px] text-zinc-500">{mainLabel}</div>
+          {isToday ? (
+            <div className="mt-1 text-[26px] leading-none font-semibold text-rose-300">Hari ini</div>
           ) : (
-            <div
-              onClick={() => {
-                sound.playClick();
-                setTempNotes(notes);
-                setIsEditingNotes(true);
-              }}
-              className="truncate cursor-pointer hover:text-zinc-200 text-zinc-400"
-              title="Klik untuk ubah catatan kado/kejutan"
-            >
-              {notes ? (
-                <span className="text-zinc-200">{notes}</span>
-              ) : (
-                <span className="italic text-zinc-500">
-                  + Tambah ide kado / catatan kejutan tgl {startDay}...
-                </span>
-              )}
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className="text-[30px] leading-none font-semibold tabular-nums text-zinc-50">
+                {calc.daysUntilMensive}
+              </span>
+              <span className="text-[12px] text-zinc-400">hari lagi</span>
             </div>
           )}
+          <div className="mt-1.5 text-[11px] text-zinc-400 capitalize">{calc.nextMensiveLong}</div>
         </div>
 
-        {/* Right: Toggle Pill Notification Display */}
-        <div className="flex items-center space-x-1 shrink-0 pl-2 border-l border-zinc-800">
-          <span className="text-zinc-400 text-[9.5px]">Di Kapsul:</span>
-          <button
-            onClick={() => {
-              sound.playClick();
-              onToggleShowAlways?.();
-            }}
-            className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors cursor-pointer ${
-              showAlwaysInCompact
-                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            {showAlwaysInCompact ? 'Selalu' : 'H-3 & Hari H'}
-          </button>
+        <div className="flex flex-col border-l border-zinc-800 divide-y divide-zinc-800">
+          <StatRow
+            label={`Anniversary ke-${calc.nextAnnivNumber}`}
+            value={calc.daysUntilAnniv === 0 ? 'Hari ini' : `${calc.daysUntilAnniv} hari`}
+            hint={calc.nextAnnivFormatted}
+          />
+          <StatRow
+            label="Bersama"
+            value={`${calc.totalDaysTogether.toLocaleString('id-ID')} hari`}
+            hint={togetherText}
+          />
+        </div>
+      </div>
+
+      {/* Catatan + tampilan kapsul */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={saveNotes}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          placeholder={`Catatan untuk ${calc.nextMensiveFormatted}…`}
+          maxLength={200}
+          className="flex-1 min-w-0 h-8 px-3 rounded-lg border border-zinc-800 bg-zinc-900/40 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600"
+        />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10.5px] text-zinc-500">Di kapsul</span>
+          <div className="inline-flex p-0.5 rounded-lg border border-zinc-800 bg-zinc-900/40">
+            {[false, true].map((always) => (
+              <button
+                key={String(always)}
+                type="button"
+                onClick={() => {
+                  if (always === showAlwaysInCompact) return;
+                  sound.playClick();
+                  onToggleShowAlways?.();
+                }}
+                className={`h-6 px-2 rounded-md text-[10.5px] transition-colors cursor-pointer ${
+                  always === showAlwaysInCompact
+                    ? 'bg-zinc-700/80 text-zinc-50'
+                    : 'text-zinc-500 hover:text-zinc-200'
+                }`}
+                title={always ? 'Hitung mundur tampil setiap hari' : 'Tampil mulai H-3 sampai hari H'}
+              >
+                {always ? 'Selalu' : 'H-3'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </motion.div>
   );
 };
+
+const StatRow: React.FC<{ label: string; value: string; hint: string }> = ({ label, value, hint }) => (
+  <div className="flex-1 flex items-center justify-between gap-3 px-4 py-2.5">
+    <div className="min-w-0">
+      <div className="text-[10.5px] text-zinc-500 truncate">{label}</div>
+      <div className="text-[13px] font-medium tabular-nums text-zinc-100">{value}</div>
+    </div>
+    <div className="text-[10.5px] text-zinc-500 tabular-nums text-right shrink-0">{hint}</div>
+  </div>
+);

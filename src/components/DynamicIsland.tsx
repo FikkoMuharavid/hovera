@@ -31,7 +31,7 @@ import { SettingsWidget } from './SettingsWidget';
 import { FileToolsWidget } from './FileToolsWidget';
 import { MediaDownloaderWidget } from './MediaDownloaderWidget';
 import { sound } from '../utils/sound';
-import { getAnniversaryCalculations } from '../utils/anniversary';
+import { getAnniversaryCalculations, getAnnivReminder, todayKey } from '../utils/anniversary';
 import { MeetingAudioRecorder } from '../utils/audioRecorder';
 import { fetchLyrics, getActiveLyric, type LyricLine } from '../utils/lyricsService';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -267,7 +267,8 @@ export const DynamicIsland: React.FC = () => {
 
   // Auto-fetch synced lyrics when track changes with request cancellation & offline resilience
   useEffect(() => {
-    if (!mediaState.title) {
+    // No network request at all when lyrics are turned off (privacy: track title/artist stay local).
+    if (!mediaState.title || !showLyrics) {
       setLyrics((prev) => (prev !== null ? null : prev));
       setIsFetchingLyrics(false);
       return;
@@ -293,7 +294,7 @@ export const DynamicIsland: React.FC = () => {
     return () => {
       abortController.abort();
     };
-  }, [mediaState.title, mediaState.artist, mediaState.durationSecs]);
+  }, [mediaState.title, mediaState.artist, mediaState.durationSecs, showLyrics]);
 
   // Synchronize playback timeline position from OS
   useEffect(() => {
@@ -597,18 +598,7 @@ export const DynamicIsland: React.FC = () => {
     } catch {
       // fallback
     }
-    return [
-      {
-        id: 'sample-1',
-        title: 'Notula Rapat Tim Proyek',
-        content:
-          'Pembahasan fitur baru Dynamic Island:\n- Integrasi pintasan aplikasi & website kerja favorit.\n- Fitur stopwatch presisi & pengingat fokus Pomodoro.\n- Fitur Speech to Text untuk transkrip rapat offline maupun online secara langsung.\n- Fitur simpan ke catatan dan ekspor ke file teks (.TXT) maupun Markdown (.MD).',
-        createdAt: Date.now() - 3600000 * 2,
-        updatedAt: Date.now() - 3600000 * 2,
-        durationSeconds: 145,
-        language: 'id-ID',
-      },
-    ];
+    return [];
   });
 
   const [isRecording, setIsRecording] = useState(false);
@@ -686,13 +676,19 @@ export const DynamicIsland: React.FC = () => {
           if (res.success && res.text) {
             finalTranscript = res.text.trim();
             setLiveTranscript(finalTranscript);
-          } else if (res.error) {
+          } else {
             console.warn('Transcription error:', res.error);
+            setSpeechError(`Transkripsi gagal: ${res.error || 'tidak ada teks yang dihasilkan'}`);
           }
+        } else {
+          setSpeechError('Rekaman terlalu pendek untuk ditranskripsi.');
         }
       } catch (err: any) {
         console.error('Final transcription failed:', err);
+        setSpeechError(`Transkripsi gagal: ${err?.message || String(err)}`);
       }
+    } else if (recorder) {
+      setSpeechError('Transkripsi suara belum tersedia di versi ini.');
     }
 
     setIsTranscribing(false);
@@ -905,6 +901,26 @@ export const DynamicIsland: React.FC = () => {
     persistAppSetting({ startDay: day, startMonth: month, startYear: year });
   }, []);
 
+  // Tanggal (YYYY-MM-DD) saat pengingat disembunyikan user; otomatis muncul lagi besoknya.
+  const [annivDismissedOn, setAnnivDismissedOn] = useState<string>(() => {
+    try {
+      return localStorage.getItem('di_anniv_dismissed_on') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const handleToggleAnnivDismissToday = useCallback(() => {
+    setAnnivDismissedOn((prev) => {
+      const today = todayKey();
+      const nextVal = prev === today ? '' : today;
+      try {
+        localStorage.setItem('di_anniv_dismissed_on', nextVal);
+      } catch {}
+      return nextVal;
+    });
+  }, []);
+
   const handleToggleShowAlwaysAnniv = useCallback(() => {
     setShowAlwaysAnniv((prev) => {
       const nextVal = !prev;
@@ -1104,6 +1120,9 @@ export const DynamicIsland: React.FC = () => {
     return () => {
       isCancelled = true;
     };
+    // Intentionally mount-only: it seeds the cache from the *initial* (localStorage)
+    // values; later changes are written by the dedicated save effects.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const islandRef = useRef<HTMLDivElement>(null);
@@ -1673,11 +1692,9 @@ export const DynamicIsland: React.FC = () => {
   const isWaterAlert = waterSecondsLeft === 0;
 
   const annivCalc = getAnniversaryCalculations(startYear, startMonth, startDay);
-  const showAnnivBadge =
-    annivEnabled &&
-    (annivCalc.isAnnivToday ||
-      annivCalc.isMensiveToday ||
-      (showAlwaysAnniv ? true : annivCalc.isMensiveApproaching));
+  const annivReminderRaw = annivEnabled ? getAnnivReminder(annivCalc, showAlwaysAnniv) : null;
+  const annivDismissedToday = annivDismissedOn === todayKey();
+  const annivReminder = annivDismissedToday ? null : annivReminderRaw;
 
   const hasRecording = isRecording;
   const hasWater = isWaterAlert;
@@ -1685,26 +1702,9 @@ export const DynamicIsland: React.FC = () => {
   const hasTimer = isTimerRunning;
   const hasStopwatch = isStopwatchRunning;
   const hasTasks = activeTasksCount > 0;
-  const hasAnniv = annivEnabled && annivCalc.isAnnivToday;
-  const hasMensive = annivEnabled && !annivCalc.isAnnivToday && annivCalc.isMensiveToday;
-  const hasApproachingAnniv =
-    annivEnabled &&
-    !annivCalc.isAnnivToday &&
-    !annivCalc.isMensiveToday &&
-    showAnnivBadge &&
-    (annivCalc.isMensiveApproaching || (annivCalc.daysUntilMensive !== undefined && annivCalc.daysUntilMensive <= 3));
+  const hasAnnivReminder = annivReminder !== null;
 
   const hasMedia = isMediaPlaying || (mediaAudioPeak > 0.012);
-
-  const notificationCount =
-    (hasMedia ? 1 : 0) +
-    (hasRecording ? 1 : 0) +
-    (hasWater ? 1 : 0) +
-    (hasStretch ? 1 : 0) +
-    (hasTimer ? 1 : 0) +
-    (hasStopwatch ? 1 : 0) +
-    (hasTasks ? 1 : 0) +
-    (hasAnniv || hasMensive || hasApproachingAnniv ? 1 : 0);
 
   const isDisplayingLyric = Boolean(
     hasMedia && showLyrics && currentLyricText && currentLyricText.trim().length > 0
@@ -1722,7 +1722,7 @@ export const DynamicIsland: React.FC = () => {
         (hasStopwatch ? 1 : 0) +
         (hasTasks ? 1 : 0) +
         (hasWater || hasStretch ? 1 : 0) +
-        (hasAnniv || hasMensive || hasApproachingAnniv ? 1 : 0);
+        (hasAnnivReminder ? 1 : 0);
       if (isDisplayingLyric) {
         if (secondaryCount >= 2) return 295;
         if (secondaryCount === 1) return 260;
@@ -1732,15 +1732,20 @@ export const DynamicIsland: React.FC = () => {
       if (secondaryCount === 1) return 225;
       return 192;
     }
-    if (notificationCount >= 4) return 340;
-    if (notificationCount === 3) return 300;
-    if (notificationCount === 2) return 260;
-    if (hasRecording) return 245;
-    if (hasWater || hasStretch) return 235;
-    if (hasAnniv || hasMensive || hasApproachingAnniv) return 230;
-    if (hasTimer || hasStopwatch) return 225;
-    if (hasTasks) return 210;
-    return 168; // Symmetrically centered when no reminders active
+    // Tanggal + jam (~145px incl. padding) ditambah perkiraan lebar tiap badge (+6px jarak).
+    const badgeWidths = [
+      annivReminder ? 34 + annivReminder.label.length * 5.6 : 0,
+      hasRecording ? 72 : 0,
+      hasWater ? 60 : 0,
+      hasStretch ? 64 : 0,
+      hasTimer ? 60 : 0,
+      hasStopwatch ? 64 : 0,
+      hasTasks ? 36 : 0,
+      updateAvailable ? 52 + (updateVersion ? updateVersion.length * 5.6 + 8 : 0) : 0,
+    ].filter((w) => w > 0);
+    if (badgeWidths.length === 0) return 168; // Symmetrically centered when no reminders active
+    const total = 145 + 8 + badgeWidths.reduce((sum, w) => sum + w + 6, -6);
+    return Math.min(420, Math.ceil(total));
   })();
 
   // Sync window size with expanded state and compact dimensions (throttled during height drag)
@@ -1766,12 +1771,7 @@ export const DynamicIsland: React.FC = () => {
         id: 'clock',
         label: 'Waktu',
         icon: ClockIcon,
-        activeIndicator:
-          isTimerRunning ||
-          isStopwatchRunning ||
-          annivCalc.isAnnivToday ||
-          annivCalc.isMensiveToday ||
-          annivCalc.isMensiveApproaching,
+        activeIndicator: isTimerRunning || isStopwatchRunning || hasAnnivReminder,
       },
       { id: 'todo', label: 'Tugas', icon: CheckSquare, badge: activeTasksCount },
       {
@@ -1801,9 +1801,7 @@ export const DynamicIsland: React.FC = () => {
     [
       isTimerRunning,
       isStopwatchRunning,
-      annivCalc.isAnnivToday,
-      annivCalc.isMensiveToday,
-      annivCalc.isMensiveApproaching,
+      hasAnnivReminder,
       activeTasksCount,
       notes.length,
       isRecording,
@@ -1915,11 +1913,7 @@ export const DynamicIsland: React.FC = () => {
                 recordingSeconds={recordingSeconds}
                 isStretchAlert={isStretchAlert}
                 isWaterAlert={isWaterAlert}
-                isAnnivToday={annivCalc.isAnnivToday}
-                isMensiveToday={annivCalc.isMensiveToday}
-                isMensiveApproaching={annivCalc.isMensiveApproaching}
-                daysUntilMensive={annivCalc.daysUntilMensive}
-                showAnnivBadge={showAnnivBadge}
+                annivReminder={annivReminder}
                 isDraggingOver={isDraggingOverCapsule}
                 mediaPlaying={isMediaPlaying}
                 mediaTitle={mediaState.title}
@@ -2239,6 +2233,9 @@ export const DynamicIsland: React.FC = () => {
                       onToggleAnnivEnabled={handleToggleAnnivEnabled}
                       showAlwaysInCompact={showAlwaysAnniv}
                       onToggleShowAlways={handleToggleShowAlwaysAnniv}
+                      hasAnnivReminder={annivReminderRaw !== null}
+                      annivDismissedToday={annivDismissedToday}
+                      onToggleAnnivDismissToday={handleToggleAnnivDismissToday}
                     />
                   )}
                   {activeTab === 'todo' && (
@@ -2262,6 +2259,7 @@ export const DynamicIsland: React.FC = () => {
                       onClearLiveTranscript={handleClearLiveTranscript}
                       speechError={speechError}
                       isTranscribing={isTranscribing}
+                      canTranscribe={typeof window.electronAPI?.transcribeAudio === 'function'}
                     />
                   )}
                   {activeTab === 'clipboard' && <ClipboardWidget key="clipboard" />}
