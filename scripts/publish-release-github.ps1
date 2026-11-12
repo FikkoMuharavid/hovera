@@ -21,22 +21,15 @@ if ($token) { $token = $token.Trim() }
 
 if (-not $token) {
 Write-Host "[PERINGATAN] Memakai token dari Git Credential Manager (scope mungkin terlalu luas)." -ForegroundColor Yellow
-$processInfo = New-Object System.Diagnostics.ProcessStartInfo
-$processInfo.FileName = "git"
-$processInfo.Arguments = "credential fill"
-$processInfo.RedirectStandardInput = $true
-$processInfo.RedirectStandardOutput = $true
-$processInfo.UseShellExecute = $false
-$processInfo.CreateNoWindow = $true
-
-$process = [System.Diagnostics.Process]::Start($processInfo)
-$process.StandardInput.WriteLine("protocol=https")
-$process.StandardInput.WriteLine("host=github.com")
-$process.StandardInput.WriteLine("")
-$process.StandardInput.Close()
-
-$output = $process.StandardOutput.ReadToEnd()
-$process.WaitForExit()
+# Input ditulis ke file ASCII lalu di-redirect lewat cmd: pipe PowerShell 5.1 bisa menambah BOM
+# di depan "protocol=" sehingga git menolak ("credential missing protocol field").
+$credInput = [System.IO.Path]::GetTempFileName()
+try {
+    [System.IO.File]::WriteAllText($credInput, "protocol=https`nhost=github.com`n`n", [System.Text.Encoding]::ASCII)
+    $output = (cmd /c "git credential fill < `"$credInput`"") -join "`n"
+} finally {
+    Remove-Item $credInput -Force -ErrorAction SilentlyContinue
+}
 
 $passwordLine = ($output -split "`r?`n") | Where-Object { $_ -like "password=*" }
 if (-not $passwordLine) {
