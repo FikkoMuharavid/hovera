@@ -5,9 +5,6 @@ import type { ElectronAPI, ProjectInfo } from '../types/electron';
 export function initTauriBridge(): void {
   if (typeof window === 'undefined') return;
 
-  // If already in Electron and not Tauri, keep native electronAPI
-  if ((window as any).electronAPI?.isElectron) return;
-
   const bridge: ElectronAPI = {
     setIgnoreMouseEvents: (ignore: boolean) => {
       invoke('set_ignore_mouse_events', { ignore }).catch(() => {});
@@ -27,8 +24,15 @@ export function initTauriBridge(): void {
     openProjectInAntigravity: async (folderPath?: string) => {
       return await invoke<boolean>('open_project_in_antigravity', { folderPath });
     },
-    scanProjects: async () => {
-      return await invoke<ProjectInfo[]>('scan_projects');
+    scanProjects: async (roots?: string[]) => {
+      return await invoke<ProjectInfo[]>('scan_projects', { roots: roots ?? [] });
+    },
+    hasCodeEditor: async () => {
+      try {
+        return await invoke<boolean>('has_code_editor');
+      } catch {
+        return false;
+      }
     },
     selectFolder: async () => {
       return await invoke<string | null>('select_folder');
@@ -91,9 +95,8 @@ export function initTauriBridge(): void {
         params
       );
     },
-    transcribeAudio: async (_params) => {
-      return { success: false, error: 'Voice transcription completed' };
-    },
+    // Speech-to-text is not available in the Tauri build yet: `transcribeAudio`
+    // is intentionally left undefined so the UI hides the recording feature.
     hideWindow: () => {
       invoke('hide_window').catch(() => {});
     },
@@ -196,7 +199,7 @@ export function initTauriBridge(): void {
         const { getVersion } = await import('@tauri-apps/api/app');
         return await getVersion();
       } catch {
-        return '1.0.1';
+        return '';
       }
     },
     checkForUpdates: async () => {
@@ -316,7 +319,20 @@ export function initTauriBridge(): void {
         if (unlisten) unlisten();
       };
     },
-    isElectron: false,
+    getClipboardHistoryEnabled: async () => {
+      try {
+        return await invoke<boolean>('get_clipboard_history_enabled');
+      } catch {
+        return true;
+      }
+    },
+    setClipboardHistoryEnabled: async (enabled: boolean) => {
+      try {
+        return await invoke<boolean>('set_clipboard_history_enabled', { enabled });
+      } catch {
+        return !enabled;
+      }
+    },
   };
 
   window.electronAPI = bridge;

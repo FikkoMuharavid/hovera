@@ -43,9 +43,11 @@ export interface ElectronAPI {
   launchApp: (target: string) => Promise<boolean>;
   adjustYOffset: (offset: number) => void;
   quitApp: () => void;
-  isElectron?: boolean;
   openProjectInAntigravity?: (folderPath: string) => Promise<boolean>;
-  scanProjects?: () => Promise<ProjectInfo[]>;
+  scanProjects?: (roots?: string[]) => Promise<ProjectInfo[]>;
+  hasCodeEditor?: () => Promise<boolean>;
+  getClipboardHistoryEnabled?: () => Promise<boolean>;
+  setClipboardHistoryEnabled?: (enabled: boolean) => Promise<boolean>;
   selectFolder?: () => Promise<string | null>;
   moveWindow?: (deltaX: number, deltaY: number) => void;
   setWindowPosition?: (x: number, y: number) => void;
