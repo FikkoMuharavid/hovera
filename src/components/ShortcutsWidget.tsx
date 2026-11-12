@@ -50,7 +50,7 @@ export interface ShortcutItem {
 const DEFAULT_SHORTCUTS: ShortcutItem[] = [
   {
     id: 'antigravity',
-    name: 'Antigravity',
+    name: 'Editor Kode',
     target: 'antigravity-picker',
     type: 'app',
     iconType: 'vscode',
@@ -128,7 +128,7 @@ export const ShortcutsWidget = React.memo(() => {
           // Pastikan Antigravity ada di urutan pertama dan menggunakan ikon VS Code serta warna biru
           const antigravityItem: ShortcutItem = {
             id: 'antigravity',
-            name: 'Antigravity',
+            name: 'Editor Kode',
             target: 'antigravity-picker',
             type: 'app',
             iconType: 'vscode',
@@ -142,7 +142,7 @@ export const ShortcutsWidget = React.memo(() => {
             parsed[existingIdx] = {
               ...parsed[existingIdx],
               id: 'antigravity',
-              name: 'Antigravity',
+              name: 'Editor Kode',
               target: 'antigravity-picker',
               type: 'app',
               iconType: 'vscode',
@@ -249,20 +249,48 @@ export const ShortcutsWidget = React.memo(() => {
     });
   };
 
-  // Load scanned projects from Electron
+  // Parent folders whose sub-folders are listed as projects (configured by the user).
+  const [projectRoots, setProjectRoots] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('di_project_roots');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.filter((p) => typeof p === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleAddProjectRoot = async () => {
+    sound.playClick();
+    const selected = await window.electronAPI?.selectFolder?.();
+    if (!selected) return;
+    setProjectRoots((prev) => {
+      if (prev.some((p) => p.toLowerCase() === selected.toLowerCase())) return prev;
+      const next = [...prev, selected];
+      try {
+        localStorage.setItem('di_project_roots', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Scan configured parent folders and merge the result with manually added folders
   useEffect(() => {
     let isMounted = true;
-    if (window.electronAPI?.scanProjects) {
-      window.electronAPI.scanProjects().then((items) => {
+    if (projectRoots.length > 0 && window.electronAPI?.scanProjects) {
+      window.electronAPI.scanProjects(projectRoots).then((items) => {
         if (isMounted && items && items.length > 0) {
-          setProjects(items);
+          setProjects((prev) => {
+            const known = new Set(items.map((i) => i.path.toLowerCase()));
+            return [...prev.filter((p) => !known.has(p.path.toLowerCase())), ...items];
+          });
         }
       });
     }
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [projectRoots]);
 
   useEffect(() => {
     try {
@@ -350,10 +378,13 @@ export const ShortcutsWidget = React.memo(() => {
     if (!newName.trim() || !newTarget.trim()) return;
 
     sound.playSuccess();
+    const trimmedTarget = newTarget.trim();
+    const isLocalPath = /^[a-zA-Z]:[\\/]/.test(trimmedTarget) || trimmedTarget.startsWith('\\\\');
     const isUrl =
-      newTarget.startsWith('http://') ||
-      newTarget.startsWith('https://') ||
-      newTarget.includes('.');
+      !isLocalPath &&
+      (trimmedTarget.startsWith('http://') ||
+        trimmedTarget.startsWith('https://') ||
+        (trimmedTarget.includes('.') && !/\.exe$/i.test(trimmedTarget)));
     const item: ShortcutItem = {
       id: Date.now().toString(),
       name: newName.trim(),
@@ -470,7 +501,7 @@ export const ShortcutsWidget = React.memo(() => {
                     <VscodeIcon className="w-3 h-3 text-white" />
                   </div>
                   <span className="text-xs font-semibold text-white">
-                    Buka Project di Antigravity
+                    Buka Project di Editor Kode
                   </span>
                 </div>
               </div>
@@ -479,9 +510,9 @@ export const ShortcutsWidget = React.memo(() => {
               <div className="flex items-center space-x-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => handleOpenProject('', 'Antigravity IDE')}
+                  onClick={() => handleOpenProject('', 'Editor Kode')}
                   className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-[10px] text-sky-300 hover:text-white transition-colors cursor-pointer"
-                  title="Buka Antigravity IDE langsung tanpa folder"
+                  title="Buka editor kode (Antigravity, VS Code, atau Cursor) tanpa folder"
                 >
                   <ExternalLink className="w-3 h-3 text-sky-400" />
                   <span>Buka App</span>
@@ -495,6 +526,20 @@ export const ShortcutsWidget = React.memo(() => {
                 >
                   <FolderOpen className="w-3 h-3 text-sky-400" />
                   <span>Pilih Folder...</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddProjectRoot}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                  title={
+                    projectRoots.length > 0
+                      ? `Folder induk dipindai: ${projectRoots.join(', ')}`
+                      : 'Tambah folder induk; semua sub-folder di dalamnya tampil sebagai project'
+                  }
+                >
+                  <Plus className="w-3 h-3 text-sky-400" />
+                  <span>Folder Induk{projectRoots.length > 0 ? ` (${projectRoots.length})` : ''}</span>
                 </button>
               </div>
             </div>
@@ -572,7 +617,7 @@ export const ShortcutsWidget = React.memo(() => {
               {openedToast && (
                 <div className="flex items-center justify-center space-x-1.5 p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-medium animate-pulse">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Membuka {openedToast} di Antigravity IDE...</span>
+                  <span>Membuka {openedToast} di Editor Kode...</span>
                 </div>
               )}
 
@@ -580,7 +625,7 @@ export const ShortcutsWidget = React.memo(() => {
               <motion.div
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                onClick={() => handleOpenProject('', 'Antigravity IDE')}
+                onClick={() => handleOpenProject('', 'Editor Kode')}
                 role="button"
                 tabIndex={0}
                 data-interactive="true"
@@ -593,14 +638,14 @@ export const ShortcutsWidget = React.memo(() => {
                   <div>
                     <div className="flex items-center space-x-1.5">
                       <span className="text-xs font-semibold text-white">
-                        Buka Antigravity IDE (Window Baru)
+                        Buka Editor Kode (Jendela Baru)
                       </span>
                       <span className="px-1.5 py-0.2 rounded bg-sky-500/25 text-sky-300 text-[8.5px] font-mono">
                         Aplikasi
                       </span>
                     </div>
                     <span className="text-[10px] text-zinc-400 block">
-                      Buka jendela Antigravity IDE langsung tanpa membuka folder tertentu
+                      Buka editor kode langsung tanpa membuka folder tertentu
                     </span>
                   </div>
                 </div>
@@ -623,7 +668,7 @@ export const ShortcutsWidget = React.memo(() => {
                   </span>
                   <span className="text-[10.5px] text-zinc-500 mt-1 max-w-[260px]">
                     {projects.length === 0
-                      ? 'Pilih folder pekerjaan Anda dari komputer untuk dibuka cepat dengan Antigravity IDE.'
+                      ? 'Pilih folder pekerjaan Anda dari komputer untuk dibuka cepat dengan editor kode Anda.'
                       : 'Coba ubah kata kunci pencarian atau kategori filter.'}
                   </span>
                   {projects.length === 0 && (

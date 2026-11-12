@@ -216,6 +216,8 @@ export const FileToolsWidget: React.FC<{
         };
       });
 
+      // One-shot hand-off of files dropped on the island; the parent clears them right after.
+      // oxlint-disable-next-line react/set-state-in-effect
       handleNewItemsArrived(items);
       if (onInitialFilesHandled) onInitialFilesHandled();
     }
@@ -234,6 +236,7 @@ export const FileToolsWidget: React.FC<{
         category: categorizeFile(f.name),
       }));
 
+      // oxlint-disable-next-line react/set-state-in-effect
       handleNewItemsArrived(items);
       if (onInitialFilesHandled) onInitialFilesHandled();
     }

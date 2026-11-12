@@ -31,6 +31,7 @@ image = { version = "0.25", default-features = false, features = ["webp", "jpeg"
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 arboard = "3"
+sha2 = "0.10"
 windows = { version = "0.62", features = [
     "Media_Control",
     "Foundation",

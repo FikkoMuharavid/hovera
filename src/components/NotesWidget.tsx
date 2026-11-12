@@ -51,6 +51,8 @@ interface NotesWidgetProps {
   onClearLiveTranscript: () => void;
   speechError: string | null;
   isTranscribing?: boolean;
+  /** False when the current build has no speech-to-text engine. */
+  canTranscribe?: boolean;
 }
 
 export const NotesWidget = React.memo<NotesWidgetProps>(({
@@ -69,6 +71,7 @@ export const NotesWidget = React.memo<NotesWidgetProps>(({
   onClearLiveTranscript,
   speechError,
   isTranscribing = false,
+  canTranscribe = false,
 }) => {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
@@ -453,7 +456,8 @@ export const NotesWidget = React.memo<NotesWidgetProps>(({
             </div>
           </div>
 
-          {/* ================= RECORDING / SPEECH-TO-TEXT BAR ================= */}
+          {/* ================= RECORDING / SPEECH-TO-TEXT BAR (only when supported) ================= */}
+          {canTranscribe && (
           <div className="my-1.5 p-2 rounded-xl bg-zinc-900/90 border border-zinc-800 shadow-sm flex flex-col gap-1.5 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -546,6 +550,7 @@ export const NotesWidget = React.memo<NotesWidgetProps>(({
               </div>
             )}
           </div>
+          )}
 
           {/* ================= NOTES LIST ================= */}
           <div className="flex items-center justify-between pb-1 shrink-0">

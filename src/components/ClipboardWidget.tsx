@@ -16,6 +16,8 @@ import {
   Maximize2,
   X,
   Info,
+  Pause,
+  Play,
 } from 'lucide-react';
 import type { ClipboardItem } from '../types/electron';
 import { sound } from '../utils/sound';
@@ -27,6 +29,20 @@ export const ClipboardWidget: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedLightboxImage, setSelectedLightboxImage] = useState<string | null>(null);
+  const [recordingEnabled, setRecordingEnabled] = useState(true);
+
+  useEffect(() => {
+    window.electronAPI?.getClipboardHistoryEnabled?.().then(setRecordingEnabled);
+  }, []);
+
+  const handleToggleRecording = useCallback(async () => {
+    sound.playClick();
+    const next = !recordingEnabled;
+    setRecordingEnabled(next);
+    const result = await window.electronAPI?.setClipboardHistoryEnabled?.(next);
+    if (typeof result === 'boolean') setRecordingEnabled(result);
+    if (!next) setItems((prev) => prev.filter((i) => i.isPinned));
+  }, [recordingEnabled]);
 
   // Load initial clipboard history and setup live listener
   useEffect(() => {
@@ -244,8 +260,26 @@ export const ClipboardWidget: React.FC = () => {
           </button>
         </div>
 
-        {/* Right: Clear History */}
+        {/* Right: Recording toggle + Clear History */}
         <div className="flex items-center gap-1">
+          {window.electronAPI?.setClipboardHistoryEnabled && (
+            <button
+              onClick={handleToggleRecording}
+              className={`px-2 py-1 rounded-lg text-[10.5px] transition-colors flex items-center gap-1 cursor-pointer ${
+                recordingEnabled
+                  ? 'text-emerald-300 hover:bg-emerald-950/30'
+                  : 'text-amber-300 bg-amber-950/30 hover:bg-amber-950/50'
+              }`}
+              title={
+                recordingEnabled
+                  ? 'Riwayat aktif. Item yang ditandai password manager tidak pernah direkam; item yang tidak di-pin hanya disimpan di memori.'
+                  : 'Perekaman riwayat clipboard dijeda'
+              }
+            >
+              {recordingEnabled ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+              <span>{recordingEnabled ? 'Jeda' : 'Rekam'}</span>
+            </button>
+          )}
           {items.some((i) => !i.isPinned) && (
             <div>
               {showClearConfirm ? (

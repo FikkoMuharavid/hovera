@@ -81,16 +81,20 @@ export const SettingsWidget = React.memo<SettingsWidgetProps>(({
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [appVersion, setAppVersion] = useState('1.0.0');
 
+  // Sync a newly received update notice from the parent during render (no extra effect pass).
+  const [prevInitialUpdateInfo, setPrevInitialUpdateInfo] = useState(initialUpdateInfo);
+  if (initialUpdateInfo !== prevInitialUpdateInfo) {
+    setPrevInitialUpdateInfo(initialUpdateInfo);
+    if (initialUpdateInfo) setUpdateInfo(initialUpdateInfo);
+  }
+
   useEffect(() => {
-    if (initialUpdateInfo) {
-      setUpdateInfo(initialUpdateInfo);
-    }
     if (window.electronAPI?.getAppVersion) {
       window.electronAPI.getAppVersion().then((v) => {
         if (v) setAppVersion(v.replace(/^v/, ''));
       });
     }
-  }, [initialUpdateInfo]);
+  }, []);
 
   const handleCheckUpdate = async () => {
     sound.playClick();

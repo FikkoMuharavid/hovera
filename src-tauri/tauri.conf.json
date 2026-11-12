@@ -1,57 +1,79 @@
 {
-    "$schema":  "https://schema.tauri.app/config/2",
-    "productName":  "Hovera",
-    "version":  "1.0.7",
-    "identifier":  "com.programfreelance.hovera",
-    "build":  {
-                  "frontendDist":  "../dist",
-                  "devUrl":  "http://localhost:5173",
-                  "beforeDevCommand":  "npm run dev:vite",
-                  "beforeBuildCommand":  "npm run build"
-              },
-    "app":  {
-                "windows":  [
-                                {
-                                    "title":  "Hovera",
-                                    "label":  "main",
-                                    "width":  600,
-                                    "height":  76,
-                                    "resizable":  true,
-                                    "fullscreen":  false,
-                                    "decorations":  false,
-                                    "transparent":  true,
-                                    "shadow":  false,
-                                    "alwaysOnTop":  true,
-                                    "skipTaskbar":  true,
-                                    "visible":  true
-                                }
-                            ],
-                "security":  {
-                                 "csp":  null
-                             }
-            },
-    "bundle":  {
-                   "active":  true,
-                   "targets":  "all",
-                   "icon":  [
-                                "icons/32x32.png",
-                                "icons/128x128.png",
-                                "icons/128x128@2x.png",
-                                "icons/icon.ico"
-                            ],
-                   "windows":  {
-                                   "nsis":  {
-                                                "installerIcon":  "icons/icon.ico",
-                                                "uninstallerIcon":  "icons/icon.ico"
-                                            }
-                               }
-               },
-    "plugins":  {
-                    "updater":  {
-                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0RDVEMkFFNkM5NTdCQkIKUldTN2U1VnNydExWSkZzREtxK2xjRnNJZ2lESzJ0RmxaT0xSSTl3ZDkrdWRkSVVRWnFqengyQjcK",
-                                    "endpoints":  [
-                                                      "https://github.com/FikkoMuharavid/hovera/releases/latest/download/latest.json"
-                                                  ]
-                                }
-                }
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hovera",
+  "version": "1.0.7",
+  "identifier": "com.programfreelance.hovera",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Hovera",
+        "label": "main",
+        "width": 600,
+        "height": 76,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https:",
+        "media-src": "'self' data: blob: https:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://lrclib.net https://music.163.com https://www.tikwm.com https://yt.chocolatemoo53.com https://invidious.nerdvpn.de https://inv.nadeko.net",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-src": "'none'",
+        "form-action": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self' http://localhost:5173",
+        "script-src": "'self' 'unsafe-inline' http://localhost:5173",
+        "style-src": "'self' 'unsafe-inline' http://localhost:5173",
+        "img-src": "'self' data: blob: https: http://localhost:5173",
+        "media-src": "'self' data: blob: https:",
+        "font-src": "'self' data: http://localhost:5173",
+        "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:5173 http://localhost:5173 https://lrclib.net https://music.163.com https://www.tikwm.com https://yt.chocolatemoo53.com https://invidious.nerdvpn.de https://inv.nadeko.net",
+        "object-src": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI0RDVEMkFFNkM5NTdCQkIKUldTN2U1VnNydExWSkZzREtxK2xjRnNJZ2lESzJ0RmxaT0xSSTl3ZDkrdWRkSVVRWnFqengyQjcK",
+      "endpoints": [
+        "https://github.com/FikkoMuharavid/hovera/releases/latest/download/latest.json"
+      ]
+    }
+  }
 }
