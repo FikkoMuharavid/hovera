@@ -11,7 +11,16 @@ param (
 
 $ErrorActionPreference = "Stop"
 
-# 1. Dapatkan token dari Git Credential Manager
+# 1. Token GitHub. Urutan: $env:GITHUB_TOKEN (disarankan: fine-grained token khusus
+#    repo ini dengan izin "Contents: Read and write") -> `gh auth token` -> Git Credential Manager.
+$token = $env:GITHUB_TOKEN
+if (-not $token -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+    $token = (gh auth token 2>$null)
+}
+if ($token) { $token = $token.Trim() }
+
+if (-not $token) {
+Write-Host "[PERINGATAN] Memakai token dari Git Credential Manager (scope mungkin terlalu luas)." -ForegroundColor Yellow
 $processInfo = New-Object System.Diagnostics.ProcessStartInfo
 $processInfo.FileName = "git"
 $processInfo.Arguments = "credential fill"
@@ -34,6 +43,7 @@ if (-not $passwordLine) {
     throw "Gagal mendapatkan token autentikasi GitHub dari git credentials."
 }
 $token = $passwordLine.Substring(9).Trim()
+}
 
 $repo = "FikkoMuharavid/hovera"
 $baseApi = "https://api.github.com/repos/$repo"

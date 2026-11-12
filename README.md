@@ -7,7 +7,7 @@
 
 ## Overview
 
-**Hovera** transforms your Windows desktop workflow by bringing the fluid, intuitive aesthetics of Apple's Dynamic Island and MacBook Notch directly to your screen. Powered by **Tauri v2** and **Rust**, Hovera operates with near-zero resource consumption (~30 MB RAM) while providing a comprehensive suite of daily productivity tools, media utilities, and system controls.
+**Hovera** transforms your Windows desktop workflow by bringing a fluid "dynamic island" capsule to the top of your screen. Powered by **Tauri v2** and **Rust** (using the system WebView2 instead of a bundled browser), Hovera stays lightweight while providing a suite of daily productivity tools, media utilities, and system controls.
 
 ---
 
@@ -70,38 +70,62 @@ Download the latest official installer (`Hovera_x.x.x_x64-setup.exe`) from the [
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v20+ recommended)
-- [Rust & Cargo](https://www.rust-lang.org/tools/install) (latest stable)
+- [Rust & Cargo](https://www.rust-lang.org/tools/install) (stable, 1.90+)
 - Visual Studio C++ Build Tools
 
 ### Running in Development
 ```bash
-# Clone the repository
 git clone https://github.com/FikkoMuharavid/hovera.git
 cd hovera
-
-# Install frontend dependencies
-npm install
-
-# Run Vite dev server with Tauri v2 window
-npm run tauri:dev
+npm install          # also installs the pinned Tauri CLI
+npm run tauri:dev    # Vite dev server + Tauri window
 ```
+
+### Checks
+```bash
+npm run typecheck && npm run lint && npm run test:rust
+```
+The same checks (plus `cargo clippy -D warnings` and `npm audit`) run in CI on every push.
 
 ### Building Production Installer
 ```bash
-# Compile and build the NSIS installer
-npm run build
-npx @tauri-apps/cli build --bundles nsis
+npm run tauri:build
 ```
-
-The compiled installer will be located in `src-tauri/target/release/bundle/nsis/`.
+The installer is written to `src-tauri/target/release/bundle/nsis/`. For a full signed release use
+`scripts/release-github.ps1` (see *Releasing* below).
 
 ---
 
-## Security & Secrets
+## Privacy
 
-Hovera does not store user data on remote servers. All notes, settings, and downloaded media remain strictly on your local machine.
+- Notes, todos, shortcuts, settings and pinned clipboard items are stored only on your PC, in
+  `%LOCALAPPDATA%\com.programfreelance.hovera\`.
+- **Clipboard history** can be paused at any time from the Clipboard tab. Content that password
+  managers and browsers mark as sensitive is never recorded. Unpinned items are kept in memory only
+  and are cleared when Hovera exits.
+- Some features contact third-party services:
+  - **Synced lyrics** send the current track's title and artist to [LRCLIB](https://lrclib.net) and
+    NetEase Cloud Music. Turn off *Lyrics* in Settings to disable this.
+  - **Media downloader** sends the link you paste to TikWM (TikTok), public Invidious instances
+    (YouTube) or Instagram, and downloads [yt-dlp](https://github.com/yt-dlp/yt-dlp) from its official
+    GitHub releases (SHA-256 verified) when needed. Only download content you have the right to download.
+  - **Auto-update** checks GitHub Releases.
 
-Release updates are cryptographically signed using Ed25519 keypairs. The private signing key is never included in the repository.
+## Security
+
+- The webview has a strict Content-Security-Policy and can only open http(s)/`ms-settings:` links,
+  launch known apps, and read/process files you picked yourself.
+- Updates are signed with an Ed25519 key (verified by the updater before installing).
+
+## Releasing
+
+1. Create the updater key once, *outside* the repo and with a password:
+   `.\scripts\generate-keys.ps1` → `~\.hovera\hovera.key`. Back up the key and password offline;
+   losing it means existing installs can no longer be updated.
+2. (Recommended) Get an Authenticode code-signing certificate (OV/EV or Azure Trusted Signing),
+   import it into the Windows certificate store and set `HOVERA_CERT_THUMBPRINT`.
+   Without it, Windows SmartScreen warns users when they run the installer.
+3. Run `.\scripts\release-github.ps1 -Version x.y.z -Notes "..." -AutoPublish`.
 
 ---
 
